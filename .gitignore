@@ -1,6 +1,15 @@
 *.run.txt
 names.json
 
+_*/
+test*.*
+nohup.out
+
+.vscode/
+.idea/
+.ruff_cache/
+*.iml
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -9,8 +18,9 @@ __pycache__/
 failed.txt
 out/*
 out/**/*
-!out/**/__init__.py
-!out/lsf/running_to_run.sh
+!__init__.py
+!running_to_run.sh
+temp*.*
 
 .idea
 .idea/**
@@ -28,6 +38,7 @@ out/**/*
 *.xml
 *.ich
 *.icp
+
 
 # C extensions
 *.so
@@ -205,9 +216,9 @@ cython_debug/
 # .idea/artifacts
 # .idea/compiler.xml
 # .idea/jarRepositories.xml
-# .idea/modules.xml
+# .idea/module.xml
 # .idea/*.iml
-# .idea/modules
+# .idea/module
 # *.iml
 # *.ipr
 
@@ -246,11 +257,3 @@ fabric.properties
 
 # Android studio 3.1+ serialized cache file
 .idea/caches/build_file_checksums.ser
-
-
-# PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-.idea/

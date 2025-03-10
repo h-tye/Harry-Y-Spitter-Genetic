@@ -8,7 +8,7 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=8G
 #SBATCH --cluster=smp
-#SBATCH --partition=smp
+#SBATCH --partition=preempt
 #SBATCH --time=1-00:00:00
 #SBATCH --chdir="/ihome/nyoungblood/hit24"
 #SBATCH --requeue
