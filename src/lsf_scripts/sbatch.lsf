@@ -1,0 +1,179 @@
+deleteall;
+clear;
+switchtolayout;
+clearfunctions;
+#find lsf files
+for(k = 0;k < 2; k = k + 1) {
+	
+    #find lsf files generated
+	files = splitstring(ls("."), "\n");
+	number_of_lsf = 0;
+	for (i=1:length(files)) {
+		file = files{i};
+		if (findstring(file, ".run.lsf") >= 0) {
+		    number_of_lsf = number_of_lsf + 1;
+		} else {
+		    files{i} = "null";
+		}
+	}
+	
+
+	lsf_files = cell(number_of_lsf);
+	count = 1;
+	for (i=1:length(files)) {
+		file = files{i};
+		if (file != "null") {
+		    lsf_files{count} = file;
+		    count = count + 1;
+		}
+	}
+	
+	#grab one of the lsf files
+	random_filename = lsf_files{k+1};	
+	lms_filename = replacestring(random_filename, ".lsf", ".lms");
+	load_and_run_filename = replacestring(random_filename, ".run.lsf",".load.lsf");
+	random_id = rand(1, 10000000, 2);
+	random_id = num2str(random_id);
+	
+	#create script where we'll load generated lms file and run it
+	write(load_and_run_filename, "load(\"" + lms_filename + "\");", "overwrite");
+	write(load_and_run_filename, "write(\"load_and_run_logger.txt\", \"This is a test\", \"overwrite\");", "append");
+	write(load_and_run_filename, "T_source = getresult(\"mon_source\",\"T\");","append");
+	write(load_and_run_filename, "T_thru = getresult(\"mon_thru\",\"T\");","append");
+	write(load_and_run_filename, "T_cross = getresult(\"mon_cross\",\"T\");","append");
+	write(load_and_run_filename, "T_source_avg = (T_source.T(2) + T_source.T(3) + T_source.T(4))/3;","append");
+	write(load_and_run_filename, "T_thru_avg = (T_thru.T(2) + T_thru.T(3) + T_thru.T(4))/3;","append");
+	write(load_and_run_filename, "T_cross_avg = (T_cross.T(2) + T_cross.T(3) + T_cross.T(4))/3;","append");
+	write(load_and_run_filename, "T_thru_ideal = 2/3;","append");
+	write(load_and_run_filename, "T_cross_ideal = 1/3;","append");
+	write(load_and_run_filename, "FOM = 1 - (abs(T_thru_avg - T_thru_ideal) + abs(T_cross_avg - T_cross_ideal));","append");
+	write(load_and_run_filename, "FOM = num2str(FOM);","append");
+	write(load_and_run_filename, "filename = currentscriptname;","append");
+	write(load_and_run_filename, "script_idx = length(pwd) + 2;","append");
+	write(load_and_run_filename, "filename = substring(filename, script_idx);","append");
+	write(load_and_run_filename, "txt_file = replacestring(filename, \".load.lsf\",\".run.txt\");","append");
+	write(load_and_run_filename, "write(txt_file, FOM, \"append\");","append");	
+
+	#generate corresponding slurm file to run the load and run lsf file
+	# Define the SLURM script content as a string
+	slurm_script_content = "#!/bin/bash\n" +
+		                   "#SBATCH --job-name=" + load_and_run_filename + "\n" +
+		                   "#SBATCH --output=slurm_%x_%A.log\n" +
+		                   "#SBATCH --mail-user=hit24@pitt.edu\n" +
+		                   "#SBATCH --mail-type=ALL\n" +
+		                   "#SBATCH --nodes=1\n" +
+		                   "#SBATCH --tasks-per-node=1\n" +
+		                   "#SBATCH --cpus-per-task=2\n" +
+		                   "#SBATCH --mem=8G\n" +
+		                   "#SBATCH --cluster=smp\n" +
+		                   "#SBATCH --partition=smp\n" +
+		                   "#SBATCH --time=1-00:00:00\n" +
+		                   "#SBATCH --chdir=\"/ihome/nyoungblood/hit24\"\n" +
+		                   "#SBATCH --requeue\n\n" +
+		                   "source \"${HOME}/.bashrc\";\n" +
+		                   "module load intel intel-mpi lumerical;\n\n" +
+		                   "OutFileLocation=\"${HOME}/slurm_${SLURM_JOB_NAME}_${SLURM_JOB_ID}.log\";\n" +
+		                   "RunDirectoryLocation=\"" + pwd + "\";\n" +
+		                   "DataDirectoryLocation=\"" + pwd + "\";\n" +
+		                   "echo \"SLURM_JOB_NAME: ${SLURM_JOB_NAME}\";\n" +
+		                   "echo \"SLURM_JOB_ID: ${SLURM_JOB_ID}\";\n" +
+		                   "echo \"OutFileLocation: ${OutFileLocation}\";\n" +
+		                   "echo \"RunDirectoryLocation: ${RunDirectoryLocation}\";\n" +
+		                   "echo \"DataDirectoryLocation: ${DataDirectoryLocation}\";\n" +
+		                   "mkdir -p $DataDirectoryLocation;\n" +
+		                   "EXIT_CODE=1;\n\n" +
+		                   "run_on_exit() {\n" +
+		                   "  echo \"\";\n" +
+		                   "  echo \"####################################### Billing #######################################\";\n" +
+		                   "  echo \"\";\n" +
+		                   "  sacct -M \"$SLURM_CLUSTER_NAME\" -j \"$SLURM_JOBID\" --format=AllocTRES%50,elapsed;\n" +
+		                   "  echo \"\";\n\n" +
+		                   "  echo \"\";\n" +
+		                   "  echo \"####################################### crc-job-stats.py #######################################\";\n" +
+		                   "  echo \"\";\n" +
+		                   "  crc-job-stats;\n" +
+		                   "  echo \"\";\n" +
+		                   "  echo \"!!!!!! Completed !!!!!!!\";\n" +
+		                   "  echo \"\";\n\n" +
+		                   "  if [ $EXIT_CODE -eq 0 ]; then\n" +
+		                   "    echo \"####################################### Main Program: Success #######################################\";\n" +
+		                   "  else\n" +
+		                   "    echo \"####################################### Main Program: Failure #######################################\";\n" +
+		                   "  fi\n" +
+		                   "}\n" +
+		                   "trap run_on_exit EXIT;\n\n" +
+		                   "echo \"####################################### Main Program: Starting #######################################\";\n\n" +
+		                   "cd $RunDirectoryLocation || exit 1;\n\n" +
+		                   "EXIT_CODE=1;\n" +
+		                   "LAST_MODIFIED_TIME=$(date +%s);\n" +
+		                   "for (( i = 1; i < 2; i++ )); do\n" +
+		                   "  echo \"${i}th attempt\";\n" +
+						   "  srun varfdtd-engine-mpich2nem -logall -trust-script \"" + lms_filename + "\" >> \"${OutFileLocation}\" 2>&1 &\n" +
+		                   "  srun mode-solutions-batch -logall -trust-script \"" + load_and_run_filename + "\" >> \"${OutFileLocation}\" 2>&1 &\n" +
+		                   "  process_id=$!\n\n" +
+		                   "  while ps -p $process_id > /dev/null; do\n" +
+		                   "    if [ -f \"$SLURM_JOB_ID.completed.txt\" ]; then\n" +
+		                   "      EXIT_CODE=0;\n" +
+		                   "      rm \"$SLURM_JOB_ID.completed.txt\";\n" +
+		                   "      echo \"Completed Successfully\";\n" +
+		                   "      kill -15 $process_id;\n" +
+		                   "      kill -9 $process_id;\n" +
+		                   "      break;\n" +
+		                   "    fi\n\n" +
+		                   "    if [ -f \"$SLURM_JOB_ID.run.txt\" ]; then\n" +
+		                   "      LAST_MODIFIED_TIME=$(stat -c %Y \"$SLURM_JOB_ID.run.txt\");\n" +
+		                   "      cat \"$SLURM_JOB_ID.run.txt\";\n" +
+		                   "      rm \"$SLURM_JOB_ID.run.txt\";\n" +
+		                   "    fi\n\n" +
+		                   "    current_time=$(date +%s);\n" +
+		                   "    time_difference=$((current_time - LAST_MODIFIED_TIME));\n" +
+		                   "    if [ $time_difference -gt 600 ]; then\n" +
+		                   "      echo \"No progress in the 10 minutes. Killing the process\";\n" +
+		                   "      kill -15 $process_id;\n" +
+		                   "      kill -9 $process_id;\n" +
+		                   "      break;\n" +
+		                   "    fi\n\n" +
+		                   "    sleep 10;\n" +
+		                   "  done\n\n" +
+		                   "  if [ $EXIT_CODE -eq 0 ]; then\n" +
+		                   "    break;\n" +
+		                   "  fi\n\n" +
+		                   "  sleep 5;\n" +
+		                   "done\n\n" +
+		                   "all_files=$(ls ./*.\"${SLURM_JOB_ID}\".running.lsf);\n" +
+		                   "for file in $all_files; do\n" +
+		                   "  file_without_num=$file;\n" +
+		                   "  file_without_num=${file_without_num%.*};\n" +
+		                   "  file_without_num=${file_without_num%.*};\n" +
+		                   "  file_without_num=${file_without_num%.*};\n" +
+		                   "  new_file=${file_without_num}.run.lsf;\n" +
+		                   "  echo \"$file -> $new_file\";\n" +
+		                   "  mv \"$file\" \"$new_file\";\n" +
+		                   "done\n\n" +
+		                   "exit $EXIT_CODE;\n";
+	write("basic_sim" + random_id + ".run.slurm", slurm_script_content, "overwrite");
+
+
+	#evaluate script to generate lms file, need to store iterator to file b/c feval() destroys env variables
+           write("iterator.txt",num2str(k), "overwrite");
+	feval(random_filename);
+           print("Reached feval()");	
+	k = read("iterator.txt");
+	k = str2num(k);
+}
+
+bash_base = "#!/usr/bin/env bash\n";
+write("run_individual_sims.sh",bash_base,"overwrite");
+files = splitstring(ls("."), "\n");
+number_of_lsf = 0;
+for (i=1:length(files)) {
+	file = files{i};
+	if (findstring(file, ".run.slurm") >= 0) {
+	    write("run_individual_sims.sh", "sbatch " + file, "append");
+	} else {
+	    files{i} = "null";
+	}
+}
+
+#create corresponding slurm file to run the generated lms file
+print("Execution completed.");

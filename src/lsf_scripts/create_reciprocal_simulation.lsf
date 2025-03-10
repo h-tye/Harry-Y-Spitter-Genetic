@@ -1,0 +1,224 @@
+if (length(getvariable("main__", "")) == 0 or getvariable("main__", "") == currentscriptname) {
+    #?currentscriptname;
+        
+    switchtodesign;
+    groupscope("::Root Element");
+    deleteall;
+    clear;
+    main__ = currentscriptname;
+
+    num_resonators = 1;
+    center_wavelength = 1550e-9;
+    wavelength_gap = 100e-9;
+    laser_power = 1e-3;
+    
+    full_reciprocal = true;
+    frequency_sweep = true;
+    waveguides = false;
+    record_all = true;
+    annotate_all = 0;
+}
+
+if (num_resonators < 1) { print("WTF?"); ?"WTF?"; break; }
+
+# Adding Elements
+create_reciprocal_ring;
+
+if (frequency_sweep) {
+    sweep_laser;
+    flipelement("laser");
+    rotateelement("laser");
+    rotateelement("laser");
+    rotateelement("laser");
+} else {
+    create_multi_laser;
+    select("multi_laser");
+    copy();
+    set("name", "laser");
+    select("multi_laser");
+    delete;
+}
+
+addelement("PIN Photodetector");
+set("name", "PIN_T");
+addelement("PIN Photodetector");
+set("name", "PIN_M");
+addelement("PIN Photodetector");
+set("name", "PIN_B");
+eletrical_analysers_ports = {"PIN_T", "PIN_M", "PIN_B"};
+for (i = 1:length(eletrical_analysers_ports)) {
+    addelement("Oscilloscope");
+    set("name", "EOSC_" + eletrical_analysers_ports{i});
+    addelement("Spectrum Analyzer");
+    set("name", "ESA_" + eletrical_analysers_ports{i});
+}
+for (i = 1:num_resonators) {
+    select("ring_resonator");
+    copy();
+    set("name", "R_" + num2str(i));
+}
+select("ring_resonator");
+delete;
+
+
+# Positioning Elements
+x_off = 0;
+y_off = 0;
+setnamed("laser", "x position", x_off - 100);
+setnamed("laser", "y position", y_off);
+setnamed("PIN_T", "x position", x_off + (num_resonators - 1) * 200 + 500);
+setnamed("PIN_T", "y position", y_off - 75);
+setnamed("PIN_M", "x position", x_off + (num_resonators - 1) * 200 + 500);
+setnamed("PIN_M", "y position", y_off + 75);
+setnamed("PIN_B", "x position", x_off + (num_resonators - 1) * 200 + 500);
+setnamed("PIN_B", "y position", y_off + 225);
+for (i = 1:num_resonators) {
+    setnamed("R_" + num2str(i), "x position", x_off + (i - 1) * 200 + 250);
+    setnamed("R_" + num2str(i), "y position", y_off);
+}
+for (i = 1:length(eletrical_analysers_ports)) {
+    setnamed("EOSC_" + eletrical_analysers_ports{i}, "x position", getnamed(eletrical_analysers_ports{i}, "x position") + 200);
+    setnamed("EOSC_" + eletrical_analysers_ports{i}, "y position", getnamed(eletrical_analysers_ports{i}, "y position") + 16);
+    setnamed("ESA_" + eletrical_analysers_ports{i}, "x position", getnamed(eletrical_analysers_ports{i}, "x position") + 300);
+    setnamed("ESA_" + eletrical_analysers_ports{i}, "y position", getnamed(eletrical_analysers_ports{i}, "y position") + 16);
+}
+
+# Adding Element Connections
+connect("laser", "output", "R_1", "lt_o");
+connect("R_" + num2str(num_resonators), "rt_o", "PIN_T", "input");
+connect("R_" + num2str(num_resonators), "rb_o", "PIN_B", "input");
+connect("R_1", "lb_o", "PIN_M", "input");
+if (frequency_sweep) {
+    connect("laser", "input 1", "R_1", "lt_o");
+    connect("laser", "input 2", "R_1", "lb_o");
+    connect("laser", "input 3", "R_" + num2str(num_resonators), "rt_o");
+    connect("laser", "input 4", "R_" + num2str(num_resonators), "rb_o");
+}
+if (num_resonators >= 2) {
+    for (i = 2:num_resonators) {
+        connect("R_" + num2str(i - 1), "rt_o", "R_" + num2str(i), "lt_o");
+        connect("R_" + num2str(i - 1), "rb_o", "R_" + num2str(i), "lb_o");
+    }
+}
+for (i = 1:length(eletrical_analysers_ports)) {
+    connect(eletrical_analysers_ports{i}, "output", "EOSC_" + eletrical_analysers_ports{i}, "input");
+    connect(eletrical_analysers_ports{i}, "output", "ESA_" + eletrical_analysers_ports{i}, "input");
+}
+
+# Array of Elements
+elements = {"laser", "PIN_T", "PIN_M", "PIN_B"};
+R_elements = cell(num_resonators);
+for (i = 1:num_resonators) { R_elements{i} = "R_" + num2str(i); }
+
+# Hiding Element Annotations
+for (i = 1:length(elements)) { setnamed(elements{i}, "annotate", annotate_all >= 1); }
+for (i = 1:length(R_elements)) { setnamed(R_elements{i}, "annotate", annotate_all >= 1); }
+
+# Adding Analyzers
+optical_elements = {"laser"};
+R_analyser_ports = cell(num_resonators * 4);
+for (i = 1:num_resonators) {
+    R_analyser_ports{4 * (i - 1) + 1} = "R_" + num2str(i) + "_lt";
+    R_analyser_ports{4 * (i - 1) + 2} = "R_" + num2str(i) + "_lb";
+    R_analyser_ports{4 * (i - 1) + 3} = "R_" + num2str(i) + "_rt";
+    R_analyser_ports{4 * (i - 1) + 4} = "R_" + num2str(i) + "_rb";
+}
+
+optical_analysers_ports = cell(length(optical_elements) + length(R_analyser_ports));
+off = 0;
+for (i = 1:length(optical_elements)) { off=off+1; optical_analysers_ports{off} = optical_elements{i}; }
+for (i = 1:length(R_analyser_ports)) { off=off+1; optical_analysers_ports{off} = R_analyser_ports{i}; }
+
+for (i = 1:length(optical_analysers_ports)) {
+    addelement("Optical Oscilloscope");
+    set("name", "OOSC_" + optical_analysers_ports{i});
+    addelement("Optical Spectrum Analyzer");
+    set("name", "OSA_" + optical_analysers_ports{i});
+    addelement("Optical Power Meter");
+    set("name", "OPM_" + optical_analysers_ports{i});
+}
+
+# Adding Analyzers Connections
+for (i = 1:length(optical_analysers_ports)) {
+    analyser = optical_analysers_ports{i};
+    if (substring(analyser, 1, 2) == "R_") {
+        element = substring(analyser, 1, length(analyser) - 3);
+        element_port = substring(analyser, length(analyser) - 1, 2) + "_o";
+        connect(element, element_port, "OOSC_" + analyser, "input");
+        connect(element, element_port, "OSA_" + analyser, "input");
+        connect(element, element_port, "OPM_" + analyser, "input");
+    } else {
+        connect(analyser, "output", "OOSC_" + analyser, "input");
+        connect(analyser, "output", "OSA_" + analyser, "input");
+        connect(analyser, "output", "OPM_" + analyser, "input");
+    }
+}
+
+
+# Positioning Elements
+setnamed("OOSC_laser", "x position", getnamed("laser", "x position") + 200);
+setnamed("OOSC_laser", "y position", getnamed("laser", "y position") + 150);
+rotateelement("OOSC_laser");
+setnamed("OSA_laser", "x position", getnamed("laser", "x position") + 200);
+setnamed("OSA_laser", "y position", getnamed("laser", "y position") + 250);
+rotateelement("OSA_laser");
+setnamed("OPM_laser", "x position", getnamed("laser", "x position") + 200);
+setnamed("OPM_laser", "y position", getnamed("laser", "y position") + 350);
+rotateelement("OPM_laser");
+
+for (i = 1:length(R_elements)) {
+    analyser = R_elements{i} + "_lt";
+    setnamed("OOSC_" + analyser, "x position", getnamed(R_elements{i}, "x position") - 50);
+    setnamed("OOSC_" + analyser, "y position", getnamed(R_elements{i}, "y position") - 150);
+    flipelement("OOSC_" + analyser); rotateelement("OOSC_" + analyser);
+    setnamed("OSA_" + analyser, "x position", getnamed(R_elements{i}, "x position") - 50);
+    setnamed("OSA_" + analyser, "y position", getnamed(R_elements{i}, "y position") - 250);
+    flipelement("OSA_" + analyser); rotateelement("OSA_" + analyser);
+    setnamed("OPM_" + analyser, "x position", getnamed(R_elements{i}, "x position") - 50);
+    setnamed("OPM_" + analyser, "y position", getnamed(R_elements{i}, "y position") - 350);
+    flipelement("OPM_" + analyser); rotateelement("OPM_" + analyser);
+    
+    analyser = R_elements{i} + "_rt";
+    setnamed("OOSC_" + analyser, "x position", getnamed(R_elements{i}, "x position") + 100);
+    setnamed("OOSC_" + analyser, "y position", getnamed(R_elements{i}, "y position") - 150);
+    flipelement("OOSC_" + analyser); rotateelement("OOSC_" + analyser);
+    setnamed("OSA_" + analyser, "x position", getnamed(R_elements{i}, "x position") + 100);
+    setnamed("OSA_" + analyser, "y position", getnamed(R_elements{i}, "y position") - 250);
+    flipelement("OSA_" + analyser); rotateelement("OSA_" + analyser);
+    setnamed("OPM_" + analyser, "x position", getnamed(R_elements{i}, "x position") + 100);
+    setnamed("OPM_" + analyser, "y position", getnamed(R_elements{i}, "y position") - 350);
+    flipelement("OPM_" + analyser); rotateelement("OPM_" + analyser);
+    
+    analyser = R_elements{i} + "_lb";
+    setnamed("OOSC_" + analyser, "x position", getnamed(R_elements{i}, "x position") - 50);
+    setnamed("OOSC_" + analyser, "y position", getnamed(R_elements{i}, "y position") + 150);
+    rotateelement("OOSC_" + analyser);
+    setnamed("OSA_" + analyser, "x position", getnamed(R_elements{i}, "x position") - 50);
+    setnamed("OSA_" + analyser, "y position", getnamed(R_elements{i}, "y position") + 250);
+    rotateelement("OSA_" + analyser);
+    setnamed("OPM_" + analyser, "x position", getnamed(R_elements{i}, "x position") - 50);
+    setnamed("OPM_" + analyser, "y position", getnamed(R_elements{i}, "y position") + 350);
+    rotateelement("OPM_" + analyser);
+    
+    analyser = R_elements{i} + "_rb";
+    setnamed("OOSC_" + analyser, "x position", getnamed(R_elements{i}, "x position") + 100);
+    setnamed("OOSC_" + analyser, "y position", getnamed(R_elements{i}, "y position") + 150);
+    rotateelement("OOSC_" + analyser);
+    setnamed("OSA_" + analyser, "x position", getnamed(R_elements{i}, "x position") + 100);
+    setnamed("OSA_" + analyser, "y position", getnamed(R_elements{i}, "y position") + 250);
+    rotateelement("OSA_" + analyser);
+    setnamed("OPM_" + analyser, "x position", getnamed(R_elements{i}, "x position") + 100);
+    setnamed("OPM_" + analyser, "y position", getnamed(R_elements{i}, "y position") + 350);
+    rotateelement("OPM_" + analyser);
+}
+
+# Hiding Analyzers Annotations
+for (i = 1:length(optical_analysers_ports)) {
+    setnamed("OOSC_" + optical_analysers_ports{i}, "annotate", annotate_all >= 6);
+    setnamed("OSA_" + optical_analysers_ports{i}, "annotate", annotate_all >= 6);
+    setnamed("OPM_" + optical_analysers_ports{i}, "annotate", annotate_all >= 6);
+}
+
+if (getvariable("main__", "") == currentscriptname) {
+    main__ = "";
+}
