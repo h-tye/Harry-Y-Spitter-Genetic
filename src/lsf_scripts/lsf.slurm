@@ -8,7 +8,7 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=8G
 #SBATCH --cluster=smp
-#SBATCH --partition=preempt
+#SBATCH --partition=smp
 #SBATCH --time=1-00:00:00
 #SBATCH --chdir="/ihome/nyoungblood/hit24"
 #SBATCH --requeue
@@ -16,6 +16,8 @@
 source "${HOME}/.bashrc";
 module load intel intel-mpi lumerical;
 
+# Expected number of completed simulation txt files
+EXPECTED_FILES=@ExpectedFiles
 OutFileLocation="${HOME}/slurm_${SLURM_JOB_NAME}_${SLURM_JOB_ID}.log";
 RunDirectoryLocation="@RunDirectoryLocation@";
 DataDirectoryLocation="@DataDirectoryLocation@";
@@ -28,10 +30,117 @@ mkdir -p $DataDirectoryLocation;
 EXIT_CODE=1;
 
 run_on_exit() {
-  echo "running bash file to execute varfdtd";
-  bash run_individual_sims.sh
-  CHANGE THIS **************************** 
-  python "${HOME}/src/genetic_alg.py"
+
+  #Define directory that our sim is running in
+  echo "Script directory: $RunDirectoryLocation"
+
+  # Check if the directory was found
+  if [[ -z "$RunDirectoryLocation" ]]; then
+      echo "Error: Should not be here $RunDirectoryLocation."
+      exit 1
+  fi
+
+  # Use $SIM_DIR in your script
+  echo "Simulation directory found: $RunDirectoryLocation"
+
+  echo "Waiting for $EXPECTED_FILES .completed.txt files in $RunDirectoryLocation..."
+
+  #run multiple iterations to ensure files are created
+  for (( i = 1; i < 4; i++ )); do
+    #If directory is good, now run generated sims
+    echo "Running bash file to execute individual sims";
+    bash run_individual_sims.sh
+    EXIT_CODE=$?
+
+    # Exit Slurm script if there are issues with bash/.lsf files
+    if [ $EXIT_CODE -ne 0 ]; then
+        echo "Bash exited early with code $EXIT_CODE. Exiting Slurm job."
+        exit $EXIT_CODE
+    fi
+
+    # Wait until all completed files are found
+    while true; do
+        # Count the number of ".completed.txt" files using `find` (more robust than `ls`)
+        COMPLETED_COUNT=$(find "$RunDirectoryLocation" -maxdepth 1 -type f -name "*.completed.txt" | wc -l)
+        echo "Completed files: $COMPLETED_COUNT "
+
+        # Check if all files are generated
+        if [[ $COMPLETED_COUNT -ge $EXPECTED_FILES ]]; then
+            echo "All $EXPECTED_FILES .completed.txt files detected. Proceeding to next step..."
+            EXIT_CODE=0
+            break
+        fi
+
+        # Check for timeout
+        current_time=$(date +%s)
+        time_difference=$((current_time - LAST_MODIFIED_TIME))
+        if [[ $time_difference -gt 300 ]]; then
+            echo "Not all sims were completed after 300 seconds, Retrying."
+            # Kill the process if necessary (ensure $process_id is defined elsewhere)
+            if [[ -n $process_id ]]; then
+                kill -15 "$process_id" 2>/dev/null
+                kill -9 "$process_id" 2>/dev/null
+            fi
+            EXIT_CODE=1
+            break #exit loop
+        fi
+
+        # Wait for the specified interval before checking again
+        sleep 30
+    done
+
+    if [ $EXIT_CODE -eq 0 ]; then
+      break;
+    fi
+  
+  done
+
+  #if we have gone through 4 iterations and all failed, exit
+  if [ $EXIT_CODE -eq 1 ]; then
+    echo "Unsuccessful run of sims"
+    exit 1
+  fi
+
+  echo "Executing Genetic Algorithm"
+  
+  python "${HOME}/Documents/Y_spitter/src/genetic_alg.py"
+  EXIT_CODE=$?
+
+  # Exit Slurm script if Python script exits early
+  if [ $EXIT_CODE -ne 0 ]; then
+      echo "Genetic algorithm exited early with code $EXIT_CODE. Exiting Slurm job."
+      exit $EXIT_CODE
+  fi
+
+  # Continue with rest of the Slurm job if needed
+  echo "Python script completed successfully."
+
+  # find our new sim directory
+  BASE_DIR="${HOME}/Documents/Y_spitter/out/lsf/"
+  SIM_DIR=$(ls -d "$BASE_DIR"simulation__iteration* 2>/dev/null)
+
+  # Check if the directory was found
+  if [[ -z "$SIM_DIR" ]]; then
+      echo "Error: No directory starting with 'simulation' found in $BASE_DIR. Sim dir: $SIM_DIR"
+      exit 1
+  fi
+
+  echo "Simulation directory found: $SIM_DIR"
+
+  #All previous files cleared, search for new generated base slurm and execute
+  for (( i = 1; i < 4; i++ )); do
+    echo "Searching for a .slurm file..."
+    slurm_file=$(find "$SIM_DIR" -maxdepth 1 -type f -name "*.slurm" | head -n 1)
+    sleep 20;
+  done
+
+  if [ -z "$slurm_file" ]; then
+      echo "No .slurm file found."
+      exit 1  # Exit with error if no file is found
+  else
+      echo "Found: $slurm_file"
+      cat "$slurm_file"
+  fi
 
   echo "";
   echo "####################################### Billing #######################################";
@@ -58,6 +167,15 @@ trap run_on_exit EXIT;
 echo "####################################### Main Program: Starting #######################################";
 
 cd $RunDirectoryLocation || exit 1;
+
+
+
+
+
+
+
+
+
 
 EXIT_CODE=1;
 LAST_MODIFIED_TIME=$(date +%s);

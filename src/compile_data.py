@@ -11,8 +11,11 @@ import mat73
 import numpy as np
 import scipy
 from tqdm import tqdm
+import sys
 
-from out.results import get_results_path
+base_path = str(Path(__file__).resolve().parent.parent)
+sys.path.append(base_path)  # Adds the parent directory
+from out import get_results_path
 from src.functions.SqliteDeDuplicationDict import SqliteDeDuplicationDict
 
 

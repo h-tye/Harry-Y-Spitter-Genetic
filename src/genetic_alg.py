@@ -62,8 +62,8 @@ from src.functions.__const__ import HASH_LENGTH
 from src.functions.lsf_script import create_lsf_script
 from src.functions.lsf_script import create_lsf_script_sweep
 from src.functions.run_sim import run_sweep
-from out.lsf import get_lsf_path
-from out.results import get_results_path
+from out import get_lsf_path
+from out import get_results_path
 from src.compile_data import get_compile_data_path
 from src.functions.param_to_combinations import param_to_combinations
 from src.functions.process_scripts import process_scripts
@@ -75,15 +75,15 @@ class Configuration:
         self.fom = fom
 
 def cleanup(directory):
-    # Cleanup: Delete the directory before we begin new iteration
-    try:
-        # Delete all files and subdirectories
-        shutil.rmtree(directory)
-        print(f"Successfully deleted directory: {directory}")
-    except PermissionError:
-        # Forcefully remove the directory (Windows only)
-        os.system(f'rmdir /s /q "{directory}"')
-        print(f"Forcefully deleted directory: {directory}")
+    #destroy all files in directory, but keeep directory
+    for filename in os.listdir(directory):
+        file_path = os.path.join(directory, filename)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):  # Check if it's a file or symbolic link
+                os.unlink(file_path)  # Delete the file or symbolic link
+                print(f"Deleted: {file_path}")
+        except Exception as e:
+            print(f"Failed to delete {file_path}. Reason: {e}")
 
 def read_in_txt_matrix(file_path):
     with open(file_path, "r") as file:
@@ -137,18 +137,19 @@ def format_matrix_string(df: pd.DataFrame) -> str:
 # Directory and history file
 # Find the correct results directory
 base_directory = Path(__file__).resolve().parent.parent  # Navigate to Y_splitter/
+history_file = base_directory / "out" / "results" / "FOM_history.txt"
 base_directory = base_directory / "out" / "lsf"  # Navigate to Y_splitter/out/lsf
 results_directory = next((d for d in base_directory.iterdir() if d.is_dir() and d.name.startswith("simulation")), None)
 
 if results_directory is None:
     raise FileNotFoundError("No simulation results directory found in Y_splitter/out/lsf/")
 
-history_file = "C:/Users/harry/OneDrive/Documents/Y_splitter/out/results/FOM_history.txt"
 iteration_configs = []
 
 # Read configurations from result files
 for file in results_directory.iterdir():
-    if file.suffix == ".txt":
+    full_suffix = "." + file.name.split(".", 1)[-1]
+    if full_suffix == ".run.txt":
         hole_matrix = read_in_txt_matrix(file)
         fom = read_in_txt_fom(file)
         iteration_configs.append(Configuration(hole_matrix, fom))
@@ -177,7 +178,14 @@ while previous_foms and i <= len(previous_foms):
         exit()
     i += 1
 
+# safety stop condition
+if len(previous_foms) > 2:
+    with open(history_file, "a") as file:
+        file.write(f"More than 2 iterations. Stopping...")
+    exit()
+
 # Write the best FOM to history
+print(top_five[0].fom)
 write_fom_to_history(history_file, top_five[0].fom)
 
 #clear directory we've been in running to make room for new iteration
@@ -448,11 +456,13 @@ file_prefix = (
 # Ensure the destination folder exists
 destination_folder.mkdir(parents=True, exist_ok=True)
 
+expected_files = 0
 # Move files with correct glob pattern
 for file in source_folder.glob(file_prefix + "*"):  # Matches files starting with script_name
     if file.is_file():  
         file.rename(destination_folder / file.name)  
         print(f"Moved: {file} → {destination_folder}")
+        expected_files = expected_files + 1
     else:
         print(f"Skipping directory: {file}")
 
@@ -465,6 +475,7 @@ compile_data_py_str = str(get_compile_data_path()).replace("\\", "/")
 
 slurm_lsf = get_lsf_scripts_path().joinpath("lsf.slurm").read_text(encoding="utf-8")
 slurm_lsf = slurm_lsf.replace("@name@", f"{script_name}")
+slurm_lsf = slurm_lsf.replace("@ExpectedFiles",f"{expected_files}")
 slurm_lsf = slurm_lsf.replace("@RunDirectoryLocation@", location_str)
 slurm_lsf = slurm_lsf.replace("@DataDirectoryLocation@", data_location_str)
 location.joinpath(f"{script_name}.lsf.slurm").write_text(slurm_lsf, encoding="utf-8")

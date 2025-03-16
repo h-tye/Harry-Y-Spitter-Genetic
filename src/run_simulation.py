@@ -21,8 +21,8 @@ from src.functions.__const__ import HASH_LENGTH
 from src.functions.lsf_script import create_lsf_script
 from src.functions.lsf_script import create_lsf_script_sweep
 from src.functions.run_sim import run_sweep
-from out.lsf import get_lsf_path
-from out.results import get_results_path
+from out import get_lsf_path
+from out import get_results_path
 from src.compile_data import get_compile_data_path
 from src.functions.param_to_combinations import param_to_combinations
 from src.functions.process_scripts import process_scripts
@@ -487,11 +487,15 @@ def _main(*args, **kwargs):
     # Ensure the destination folder exists
     destination_folder.mkdir(parents=True, exist_ok=True)
 
+    #expected number of simulation files genereated, need for slurm
+
+    expected_files = 0
     # Move files with correct glob pattern
     for file in source_folder.glob(file_prefix + "*"):  # Matches files starting with script_name
         if file.is_file():  
             file.rename(destination_folder / file.name)  
             print(f"Moved: {file} → {destination_folder}")
+            expected_files = expected_files + 1
         else:
             print(f"Skipping directory: {file}")
 
@@ -504,6 +508,7 @@ def _main(*args, **kwargs):
 
     slurm_lsf = get_lsf_scripts_path().joinpath("lsf.slurm").read_text(encoding="utf-8")
     slurm_lsf = slurm_lsf.replace("@name@", f"{script_name}")
+    slurm_lsf = slurm_lsf.replace("@ExpectedFiles",f"{expected_files}")
     slurm_lsf = slurm_lsf.replace("@RunDirectoryLocation@", location_str)
     slurm_lsf = slurm_lsf.replace("@DataDirectoryLocation@", data_location_str)
     location.joinpath(f"{script_name}.lsf.slurm").write_text(slurm_lsf, encoding="utf-8")

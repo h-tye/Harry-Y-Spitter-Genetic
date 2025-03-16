@@ -32,6 +32,7 @@ for(k = 0;k < 2; k = k + 1) {
 	random_filename = lsf_files{k+1};	
 	lms_filename = replacestring(random_filename, ".lsf", ".lms");
 	load_and_run_filename = replacestring(random_filename, ".run.lsf",".load.lsf");
+	completed_filename = replacestring(random_filename, ".run.lsf",".completed.txt");
 	random_id = rand(1, 10000000, 2);
 	random_id = num2str(random_id);
 	
@@ -52,7 +53,9 @@ for(k = 0;k < 2; k = k + 1) {
 	write(load_and_run_filename, "script_idx = length(pwd) + 2;","append");
 	write(load_and_run_filename, "filename = substring(filename, script_idx);","append");
 	write(load_and_run_filename, "txt_file = replacestring(filename, \".load.lsf\",\".run.txt\");","append");
+	write(load_and_run_filename, "completed_file = replacestring(filename, \".load.lsf\",\".completed.txt\");","append");
 	write(load_and_run_filename, "write(txt_file, FOM, \"append\");","append");	
+	write(load_and_run_filename, "write(completed_file, \"Sim is done\", \"overwrite\");","append");
 
 	#generate corresponding slurm file to run the load and run lsf file
 	# Define the SLURM script content as a string
@@ -66,7 +69,7 @@ for(k = 0;k < 2; k = k + 1) {
 		                   "#SBATCH --cpus-per-task=2\n" +
 		                   "#SBATCH --mem=8G\n" +
 		                   "#SBATCH --cluster=smp\n" +
-		                   "#SBATCH --partition=smp\n" +
+		                   "#SBATCH --partition=preempt\n" +
 		                   "#SBATCH --time=1-00:00:00\n" +
 		                   "#SBATCH --chdir=\"/ihome/nyoungblood/hit24\"\n" +
 		                   "#SBATCH --requeue\n\n" +
