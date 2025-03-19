@@ -139,7 +139,12 @@ def format_matrix_string(df: pd.DataFrame) -> str:
 base_directory = Path(__file__).resolve().parent.parent  # Navigate to Y_splitter/
 history_file = base_directory / "out" / "results" / "FOM_history.txt"
 base_directory = base_directory / "out" / "lsf"  # Navigate to Y_splitter/out/lsf
-results_directory = next((d for d in base_directory.iterdir() if d.is_dir() and d.name.startswith("simulation")), None)
+results_directory = next(
+    (d for d in base_directory.iterdir() 
+     if d.is_dir() and d.name.startswith("simulation") and any(d.iterdir())), 
+    None
+)
+
 
 if results_directory is None:
     raise FileNotFoundError("No simulation results directory found in Y_splitter/out/lsf/")
@@ -156,7 +161,6 @@ for file in results_directory.iterdir():
 
 # Sort by FOM value in descending order
 top_five = sort_by_fom(iteration_configs)[:5]
-
 
 # Ensure loss function is decreasing
 i = 1
@@ -181,7 +185,7 @@ while previous_foms and i <= len(previous_foms):
 # safety stop condition
 if len(previous_foms) > 2:
     with open(history_file, "a") as file:
-        file.write(f"More than 2 iterations. Stopping...")
+        file.write(f"More than 3 iterations. Stopping...")
     exit()
 
 # Write the best FOM to history
@@ -398,7 +402,8 @@ for configuration in top_five:
     hole_array = configuration.hole_matrix
 
     #for each configuration, generate 4 child configs
-    for simulation_num in range(4):
+    num_child_configs = 1
+    for simulation_num in range(num_child_configs):
 
         #script name = iteration + accuracy marker(1-5) + individual simulation_num
         script_name = (
@@ -424,12 +429,17 @@ for configuration in top_five:
             **common_args
         )
 
-        # generate a new configuration
-        # Randomly indices, num of indices is proportional to the FOM, lower FOM => more random
+        # for each child config, randomly toggle 5*i indices
+        # we toggle more indices as the sims get less accurate
+        # Ex. top configuartion will generate 4 children, each with 5 toggled pizels
+        # 2nd config will genereate 4 children, each with 10 toggled pixels, etc
         for _ in range(5*i):
             row, col = np.random.randint(0, 20, size=2)  # Random row & column index
             hole_array.iloc[row, col] = 1 - hole_array.iloc[row, col]  # Toggle 0, 1
+            print(f"{hole_array}")
 
+    #once we are done configuartion iterate i
+    i = i + 1 
 #generate slurm file for all scripts, code pulled from lsf.py 
 location = get_lsf_path()
 data_location = get_results_path()

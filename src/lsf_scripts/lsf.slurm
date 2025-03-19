@@ -31,18 +31,6 @@ EXIT_CODE=1;
 
 run_on_exit() {
 
-  #Define directory that our sim is running in
-  echo "Script directory: $RunDirectoryLocation"
-
-  # Check if the directory was found
-  if [[ -z "$RunDirectoryLocation" ]]; then
-      echo "Error: Should not be here $RunDirectoryLocation."
-      exit 1
-  fi
-
-  # Use $SIM_DIR in your script
-  echo "Simulation directory found: $RunDirectoryLocation"
-
   echo "Waiting for $EXPECTED_FILES .completed.txt files in $RunDirectoryLocation..."
 
   #run multiple iterations to ensure files are created
@@ -58,6 +46,7 @@ run_on_exit() {
         exit $EXIT_CODE
     fi
 
+    LAST_MODIFIED_TIME=$(date +%s);
     # Wait until all completed files are found
     while true; do
         # Count the number of ".completed.txt" files using `find` (more robust than `ls`)
@@ -73,9 +62,11 @@ run_on_exit() {
 
         # Check for timeout
         current_time=$(date +%s)
+        echo "Current Time: $current_time"
+        echo "Last modified time: $LAST_MODIFIED_TIME"
         time_difference=$((current_time - LAST_MODIFIED_TIME))
-        if [[ $time_difference -gt 300 ]]; then
-            echo "Not all sims were completed after 300 seconds, Retrying."
+        if [[ $time_difference -gt 100 ]]; then
+            echo "Not all sims were completed after 100 seconds, Retrying."
             # Kill the process if necessary (ensure $process_id is defined elsewhere)
             if [[ -n $process_id ]]; then
                 kill -15 "$process_id" 2>/dev/null
@@ -115,22 +106,25 @@ run_on_exit() {
   # Continue with rest of the Slurm job if needed
   echo "Python script completed successfully."
 
+  #ensure previous directory has been destroyed first
+  sleep 30;
+
   # find our new sim directory
   BASE_DIR="${HOME}/Documents/Y_spitter/out/lsf/"
-  SIM_DIR=$(ls -d "$BASE_DIR"simulation__iteration* 2>/dev/null)
+  # SIM_DIR=$(ls -d "$BASE_DIR"simulation__iteration* 2>/dev/null)
 
-  # Check if the directory was found
-  if [[ -z "$SIM_DIR" ]]; then
-      echo "Error: No directory starting with 'simulation' found in $BASE_DIR. Sim dir: $SIM_DIR"
-      exit 1
-  fi
+  # # Check if the directory was found
+  # if [[ -z "$SIM_DIR" ]]; then
+  #     echo "Error: No directory starting with 'simulation' found in $BASE_DIR. Sim dir: $SIM_DIR"
+  #     exit 1
+  # fi
 
-  echo "Simulation directory found: $SIM_DIR"
+  echo "Simulation directory found: $BASE_DIR"
 
   #All previous files cleared, search for new generated base slurm and execute
   for (( i = 1; i < 4; i++ )); do
     echo "Searching for a .slurm file..."
-    slurm_file=$(find "$SIM_DIR" -maxdepth 1 -type f -name "*.slurm" | head -n 1)
+    slurm_file=$(find "$BASE_DIR" -maxdepth 2 -type f -name "*.slurm" | head -n 1)
     sleep 20;
   done
 
@@ -138,8 +132,9 @@ run_on_exit() {
       echo "No .slurm file found."
       exit 1  # Exit with error if no file is found
   else
+      #run next iteration
       echo "Found: $slurm_file"
-      cat "$slurm_file"
+      sbatch "$slurm_file"
   fi
 
   echo "";
