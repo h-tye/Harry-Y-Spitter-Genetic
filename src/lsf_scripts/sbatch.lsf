@@ -3,7 +3,7 @@ clear;
 switchtolayout;
 clearfunctions;
 #find lsf files
-for(k = 0;k < 2; k = k + 1) {
+for(k = 0;k < 25; k = k + 1) {
 	
     #find lsf files generated
 	files = splitstring(ls("."), "\n");
@@ -62,7 +62,6 @@ for(k = 0;k < 2; k = k + 1) {
 	slurm_script_content = "#!/bin/bash\n" +
 		                   "#SBATCH --job-name=" + load_and_run_filename + "\n" +
 		                   "#SBATCH --output=slurm_%x_%A.log\n" +
-		                   "#SBATCH --mail-user=hit24@pitt.edu\n" +
 		                   "#SBATCH --mail-type=ALL\n" +
 		                   "#SBATCH --nodes=1\n" +
 		                   "#SBATCH --tasks-per-node=1\n" +
@@ -111,8 +110,8 @@ for(k = 0;k < 2; k = k + 1) {
 		                   "LAST_MODIFIED_TIME=$(date +%s);\n" +
 		                   "for (( i = 1; i < 2; i++ )); do\n" +
 		                   "  echo \"${i}th attempt\";\n" +
-						   "  srun varfdtd-engine-mpich2nem -logall -trust-script \"" + lms_filename + "\" >> \"${OutFileLocation}\" 2>&1 &\n" +
-		                   "  srun mode-solutions-batch -logall -trust-script \"" + load_and_run_filename + "\" >> \"${OutFileLocation}\" 2>&1 &\n" +
+						   "  srun varfdtd-engine-mpich2nem -trust-script \"" + lms_filename + "\" >> \"${OutFileLocation}\" 2>&1 &\n" +
+		                   "  srun mode-solutions-batch -trust-script \"" + load_and_run_filename + "\" >> \"${OutFileLocation}\" 2>&1 &\n" +
 		                   "  process_id=$!\n\n" +
 		                   "  while ps -p $process_id > /dev/null; do\n" +
 		                   "    if [ -f \"$SLURM_JOB_ID.completed.txt\" ]; then\n" +
@@ -154,13 +153,13 @@ for(k = 0;k < 2; k = k + 1) {
 		                   "  mv \"$file\" \"$new_file\";\n" +
 		                   "done\n\n" +
 		                   "exit $EXIT_CODE;\n";
-	write("basic_sim" + random_id + ".run.slurm", slurm_script_content, "overwrite");
+	write("basic_sim" + num2str(k) + ".run.slurm", slurm_script_content, "overwrite");
 
 
 	#evaluate script to generate lms file, need to store iterator to file b/c feval() destroys env variables
-           write("iterator.txt",num2str(k), "overwrite");
+    write("iterator.txt",num2str(k), "overwrite");
 	feval(random_filename);
-           print("Reached feval()");	
+    print("Reached feval()");	
 	k = read("iterator.txt");
 	k = str2num(k);
 }

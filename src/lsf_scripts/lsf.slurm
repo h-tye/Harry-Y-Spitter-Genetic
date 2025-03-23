@@ -66,7 +66,7 @@ run_on_exit() {
         echo "Last modified time: $LAST_MODIFIED_TIME"
         time_difference=$((current_time - LAST_MODIFIED_TIME))
         if [[ $time_difference -gt 100 ]]; then
-            echo "Not all sims were completed after 100 seconds, Retrying."
+            echo "Not all sims were completed after 300 seconds, Retrying."
             # Kill the process if necessary (ensure $process_id is defined elsewhere)
             if [[ -n $process_id ]]; then
                 kill -15 "$process_id" 2>/dev/null

@@ -53,7 +53,6 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 import sys
-import shutil
 base_path = str(Path(__file__).resolve().parent.parent)
 sys.path.append(base_path)  # Adds the parent directory
 
@@ -170,8 +169,8 @@ previous_foms = get_last_fom_values(history_file, num_values=5)
 #stopping conditions, if fom is good continue, if fom is really good or loss is bad exit
 while previous_foms and i <= len(previous_foms):
     previous_fom = previous_foms[-i]  # Check the most recent FOM values
-    if top_five[0].fom >= .70:
-        print("FOM exceeds .70")
+    if top_five[0].fom >= .90:
+        print("FOM exceeds .90")
         cleanup(results_directory)
         exit()
     if top_five[0].fom > previous_fom:
@@ -183,9 +182,9 @@ while previous_foms and i <= len(previous_foms):
     i += 1
 
 # safety stop condition
-if len(previous_foms) > 2:
+if len(previous_foms) > 5:
     with open(history_file, "a") as file:
-        file.write(f"More than 3 iterations. Stopping...")
+        file.write(f"More than 6 iterations. Stopping...")
     exit()
 
 # Write the best FOM to history
@@ -394,6 +393,8 @@ SETUP_SCRIPT = r'''
 '''
 
 i = 1 #iterator marker
+num_child_configs = 4 #number of child configurations we want to generate per each sim
+
 iteration_num = len(previous_foms) #number of iterations is marked by number of foms stored to history
 for configuration in top_five:
     #now we just use run_simulation.py within a for loop
@@ -402,7 +403,6 @@ for configuration in top_five:
     hole_array = configuration.hole_matrix
 
     #for each configuration, generate 4 child configs
-    num_child_configs = 1
     for simulation_num in range(num_child_configs):
 
         #script name = iteration + accuracy marker(1-5) + individual simulation_num
@@ -414,6 +414,15 @@ for configuration in top_five:
             f'{simulation_num}'
         )
         print(f"Script name: {script_name}")
+
+        # for each child config, randomly toggle 10*i indices
+        # we toggle more indices as the sims get less accurate
+        # Ex. top configuartion will generate 4 children, each with 5 toggled pizels
+        # 2nd config will genereate 4 children, each with 20 toggled pixels, etc
+        for _ in range(10*i):
+            row, col = np.random.randint(0, 20, size=2)  # Random row & column index
+            hole_array.iloc[row, col] = 1 - hole_array.iloc[row, col]  # Toggle 0, 1
+        
 
         setup_script = SETUP_SCRIPT
         setup_script = setup_script.replace('{configuration}',format_matrix_string(hole_array))
@@ -429,21 +438,56 @@ for configuration in top_five:
             **common_args
         )
 
-        # for each child config, randomly toggle 5*i indices
-        # we toggle more indices as the sims get less accurate
-        # Ex. top configuartion will generate 4 children, each with 5 toggled pizels
-        # 2nd config will genereate 4 children, each with 10 toggled pixels, etc
-        for _ in range(5*i):
-            row, col = np.random.randint(0, 20, size=2)  # Random row & column index
-            hole_array.iloc[row, col] = 1 - hole_array.iloc[row, col]  # Toggle 0, 1
-            print(f"{hole_array}")
 
     #once we are done configuartion iterate i
     i = i + 1 
+
+
+#create 5 random sims, can abstract this logic into previous step if desired
+for simulation_num in range(5):
+
+    #unique name for randoms
+    script_name = (
+        f'simulation_'
+        f'_iteration_num'
+        f'{iteration_num}_'
+        f'random_'
+        f'{simulation_num}'
+    )
+    print(f"Script name: {script_name}")
+
+    #randomly toggle every pixel
+    for _ in range(400):
+        row, col = np.random.randint(0, 20, size=2)  # Random row & column index
+
+        #hole array is from last defined one, doesn't matter because we alter everything anyways
+        hole_array.iloc[row, col] = 1 - hole_array.iloc[row, col]  # Toggle 0, 1
+    
+    print(f"{hole_array}")
+
+    setup_script = SETUP_SCRIPT
+    setup_script = setup_script.replace('{configuration}',format_matrix_string(hole_array))
+
+    common_args = dict(
+        parameters=format_matrix_string(hole_array),
+        setup_script=setup_script,
+        script_name=script_name,
+    )
+
+    #generate individual script for configuration with uniq
+    create_lsf_script(
+        **common_args
+    )
+
 #generate slurm file for all scripts, code pulled from lsf.py 
 location = get_lsf_path()
 data_location = get_results_path()
 
+script_name = (
+        f'simulation_'
+        f'_iteration_num'
+        f'{iteration_num}_'
+)
 location = location.joinpath(script_name).absolute()
 data_location = data_location.joinpath(script_name).absolute()
 
