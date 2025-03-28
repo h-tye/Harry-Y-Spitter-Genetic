@@ -34,7 +34,7 @@ run_on_exit() {
   echo "Waiting for $EXPECTED_FILES .completed.txt files in $RunDirectoryLocation..."
 
   #run multiple iterations to ensure files are created
-  for (( i = 1; i < 4; i++ )); do
+  for (( i = 1; i < 7; i++ )); do
     #If directory is good, now run generated sims
     echo "Running bash file to execute individual sims";
     bash run_individual_sims.sh
@@ -65,8 +65,8 @@ run_on_exit() {
         echo "Current Time: $current_time"
         echo "Last modified time: $LAST_MODIFIED_TIME"
         time_difference=$((current_time - LAST_MODIFIED_TIME))
-        if [[ $time_difference -gt 100 ]]; then
-            echo "Not all sims were completed after 300 seconds, Retrying."
+        if [[ $time_difference -gt 60 ]]; then
+            echo "Not all sims were completed after 60 seconds, Retrying."
             # Kill the process if necessary (ensure $process_id is defined elsewhere)
             if [[ -n $process_id ]]; then
                 kill -15 "$process_id" 2>/dev/null

@@ -69,20 +69,42 @@ from src.functions.process_scripts import process_scripts
 from src.lsf_scripts import get_lsf_scripts_path
 
 class Configuration:
-    def __init__(self, hole_matrix, fom):
+    def __init__(self, hole_matrix, fom,filename):
         self.hole_matrix = pd.DataFrame(hole_matrix)
         self.fom = fom
+        self.filename = filename
 
-def cleanup(directory):
-    #destroy all files in directory, but keeep directory
+import os
+import shutil
+
+def cleanup(directory, move_to_dir=None):
+
+    # Create the move_to directory if it doesn't exist
+    if move_to_dir and not os.path.exists(move_to_dir):
+        os.makedirs(move_to_dir)
+    
+    # First pass: Move .run.txt files to seperate directory to use later
     for filename in os.listdir(directory):
         file_path = os.path.join(directory, filename)
         try:
-            if os.path.isfile(file_path) or os.path.islink(file_path):  # Check if it's a file or symbolic link
-                os.unlink(file_path)  # Delete the file or symbolic link
-                print(f"Deleted: {file_path}")
+            # Check if file has .run.txt extension and we have a move directory
+            if move_to_dir and filename.endswith('.run.txt'):
+                dest_path = os.path.join(move_to_dir, filename)
+                shutil.move(file_path, dest_path)
+                print(f"Moved: {file_path} -> {dest_path}")
         except Exception as e:
-            print(f"Failed to delete {file_path}. Reason: {e}")
+            print(f"Failed to move {file_path}. Reason: {e}")
+    
+    # Second pass: Delete all remaining files, do a lot to ensure deletion
+    for _ in range(700): 
+        for filename in os.listdir(directory):
+            file_path = os.path.join(directory, filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.unlink(file_path)
+                    print(f"Deleted: {file_path}")
+            except Exception as e:
+                print(f"Failed to delete {file_path}. Reason: {e}")
 
 def read_in_txt_matrix(file_path):
     with open(file_path, "r") as file:
@@ -109,7 +131,7 @@ def read_in_txt_fom(file_path):
 def sort_by_fom(configs):
     return sorted(configs, key=lambda config: config.fom, reverse=True)
 
-def get_last_fom_values(history_file, num_values=5):
+def get_last_fom_values(history_file, num_values):
     if not Path(history_file).exists():
         return []
     with open(history_file, "r") as file:
@@ -133,10 +155,52 @@ def format_matrix_string(df: pd.DataFrame) -> str:
     matrix_str += " ]"  # Close the matrix string
     return matrix_str
 
+def long_term_LMR(top_five, previous_foms):
+    #first get an idea of how much we have changed recently(relative to last 4 iterations)
+    total_difference = 0
+    for j in range(4):
+        difference = top_five[0].fom - previous_foms[-j]
+        total_difference = total_difference + difference
+    
+    avg_grad = total_difference / 4
+
+    #then figure out how this compares in a broader sense so that we can normalize
+    global_total = 0
+    for k in range(15):
+        global_difference = abs(previous_foms[-k] - previous_foms[-k-1])
+        global_total = global_total + global_difference
+    normalized_grad = global_total / 15
+
+    #define our coefficient to alter mutation strength. Squared so it is extra sensitive to large increases
+    improvement_rate = (avg_grad * avg_grad) / (normalized_grad*normalized_grad)
+
+    #if we are moving up, large increases means slow down and investigate sorroundings, hence 
+    # it is inversely proportional to gradient. In the case that the average gradient is small
+    # it is still likely to be N(.000064), {N<10} so mutation strength should remain reasonable
+    if avg_grad > 0:
+        mutation_strength = int(mutation_strength * (1/improvement_rate)) + 1
+
+    #if we are moving down, large decreases indicates we are exiting an optimal search space
+    #and should thus start increasing our mutation rate to find a new one. If the decreases are small,
+    # we could be finely navigating an area and should thus slow our mutation rate to comb over search space
+    else :
+        mutation_strength = int(abs(improvement_rate) * mutation_strength) + 2
+
+    
+    print(f"Current Iteration Best: {top_five[0].fom}")
+    print(f"Previous Best: {previous_fom}")
+    print(f"Average change over the last 4: {avg_grad}")
+    print(f"Average change over the last 15: {normalized_grad}")
+    print(f"Improvemt Rate: {improvement_rate}")
+
+    return mutation_strength
+
 # Directory and history file
 # Find the correct results directory
 base_directory = Path(__file__).resolve().parent.parent  # Navigate to Y_splitter/
 history_file = base_directory / "out" / "results" / "FOM_history.txt"
+array_history = base_directory / "out" / "results" / "Array_history.txt"
+file_history = base_directory / "out" / "results" / "File_history.txt"
 base_directory = base_directory / "out" / "lsf"  # Navigate to Y_splitter/out/lsf
 results_directory = next(
     (d for d in base_directory.iterdir() 
@@ -156,15 +220,18 @@ for file in results_directory.iterdir():
     if full_suffix == ".run.txt":
         hole_matrix = read_in_txt_matrix(file)
         fom = read_in_txt_fom(file)
-        iteration_configs.append(Configuration(hole_matrix, fom))
+        filename = file
+        iteration_configs.append(Configuration(hole_matrix, fom,filename))
 
 # Sort by FOM value in descending order
 top_five = sort_by_fom(iteration_configs)[:5]
 
 # Ensure loss function is decreasing
 i = 1
-previous_foms = get_last_fom_values(history_file, num_values=5)
+previous_foms = get_last_fom_values(history_file, 100)
 
+#hyperparameter to decide genetic variance
+alpha = 12
 
 #stopping conditions, if fom is good continue, if fom is really good or loss is bad exit
 while previous_foms and i <= len(previous_foms):
@@ -173,26 +240,46 @@ while previous_foms and i <= len(previous_foms):
         print("FOM exceeds .90")
         cleanup(results_directory)
         exit()
-    if top_five[0].fom > previous_fom:
+    if i == 1:
+
+        #calculate mutation strength:
+
+        #proceed to less aggressive mutation rate after 20 iterations
+        if(len(previous_foms) > 20):
+            mutation_strength = int(long_term_LMR(top_five,previous_foms)) + 1
+
+        else:
+            mutation_strength = (1 - ((top_five[0].fom - previous_fom) / previous_fom) * alpha) + 1
+
+        print(f"Mutation Strength: {mutation_strength}")
         break
+    
+    if top_five[0] > previous_fom:
+        break #break out if our fom is greater than any of the last 5
+
+    #if loss function is not decreasing, break
     if i >= 5:
-        print("Loss has not decreased past 5 iterations")
+        print("Loss has not decreased past 5 iterations, Restarting from current best")
         cleanup(results_directory)
         exit()
     i += 1
 
 # safety stop condition
-if len(previous_foms) > 5:
+if len(previous_foms) > 200:
     with open(history_file, "a") as file:
-        file.write(f"More than 6 iterations. Stopping...")
+        file.write(f"More than 200 iterations. Stopping...")
     exit()
 
 # Write the best FOM to history
-print(top_five[0].fom)
 write_fom_to_history(history_file, top_five[0].fom)
+write_fom_to_history(file_history, top_five[0].filename)
+write_fom_to_history(array_history, top_five[0].hole_matrix)
 
-#clear directory we've been in running to make room for new iteration
-cleanup(results_directory)
+
+#clear directory we've been in running to make room for new iteration, run a lot to ensure it destroys all files
+#store .run.txt files for NN training
+database_location =  base_directory / "data_storage"
+cleanup(results_directory, database_location)
 
 
 SETUP_SCRIPT = r'''
@@ -393,7 +480,7 @@ SETUP_SCRIPT = r'''
 '''
 
 i = 1 #iterator marker
-num_child_configs = 4 #number of child configurations we want to generate per each sim
+num_child_configs = 9 #number of child configurations we want to generate per each sim
 
 iteration_num = len(previous_foms) #number of iterations is marked by number of foms stored to history
 for configuration in top_five:
@@ -413,13 +500,13 @@ for configuration in top_five:
             f'{i}_'
             f'{simulation_num}'
         )
-        print(f"Script name: {script_name}")
 
         # for each child config, randomly toggle 10*i indices
         # we toggle more indices as the sims get less accurate
         # Ex. top configuartion will generate 4 children, each with 5 toggled pizels
         # 2nd config will genereate 4 children, each with 20 toggled pixels, etc
-        for _ in range(10*i):
+        for _ in range(mutation_strength*i):
+            local_mutation = mutation_strength*i
             row, col = np.random.randint(0, 20, size=2)  # Random row & column index
             hole_array.iloc[row, col] = 1 - hole_array.iloc[row, col]  # Toggle 0, 1
         
@@ -454,7 +541,6 @@ for simulation_num in range(5):
         f'random_'
         f'{simulation_num}'
     )
-    print(f"Script name: {script_name}")
 
     #randomly toggle every pixel
     for _ in range(400):
@@ -463,7 +549,6 @@ for simulation_num in range(5):
         #hole array is from last defined one, doesn't matter because we alter everything anyways
         hole_array.iloc[row, col] = 1 - hole_array.iloc[row, col]  # Toggle 0, 1
     
-    print(f"{hole_array}")
 
     setup_script = SETUP_SCRIPT
     setup_script = setup_script.replace('{configuration}',format_matrix_string(hole_array))
@@ -515,14 +600,14 @@ expected_files = 0
 for file in source_folder.glob(file_prefix + "*"):  # Matches files starting with script_name
     if file.is_file():  
         file.rename(destination_folder / file.name)  
-        print(f"Moved: {file} → {destination_folder}")
+        #print(f"Moved: {file} → {destination_folder}")
         expected_files = expected_files + 1
     else:
         print(f"Skipping directory: {file}")
 
-print(f'{location}')
+#print(f'{location}')
 data_location.mkdir(exist_ok=True)
-print(f'{data_location}')
+#print(f'{data_location}')
 location_str = str(location).replace("\\", "/")
 data_location_str = str(data_location).replace("\\", "/")
 compile_data_py_str = str(get_compile_data_path()).replace("\\", "/")
