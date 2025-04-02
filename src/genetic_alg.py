@@ -155,11 +155,12 @@ def format_matrix_string(df: pd.DataFrame) -> str:
     matrix_str += " ]"  # Close the matrix string
     return matrix_str
 
-def long_term_LMR(top_five, previous_foms):
-    #first get an idea of how much we have changed recently(relative to last 4 iterations)
-    total_difference = 0
-    for j in range(4):
-        difference = top_five[0].fom - previous_foms[-j]
+def long_term_LMR(top_five, previous_foms,gamma):
+
+    # get an idea of how much we have changed recently(relative to last 4 iterations)
+    total_difference = top_five[0].fom - previous_foms[-1] #calculate current gradient
+    for j in range(3):
+        difference = previous_foms[-j-1] - previous_foms[-j-2]
         total_difference = total_difference + difference
     
     avg_grad = total_difference / 4
@@ -172,26 +173,36 @@ def long_term_LMR(top_five, previous_foms):
     normalized_grad = global_total / 15
 
     #define our coefficient to alter mutation strength. Squared so it is extra sensitive to large increases
-    improvement_rate = (avg_grad * avg_grad) / (normalized_grad*normalized_grad)
+    improvement_rate = (avg_grad * avg_grad) / (normalized_grad * normalized_grad)
 
-    #if we are moving up, large increases means slow down and investigate sorroundings, hence 
-    # it is inversely proportional to gradient. In the case that the average gradient is small
-    # it is still likely to be N(.000064), {N<10} so mutation strength should remain reasonable
-    if avg_grad > 0:
-        mutation_strength = int(mutation_strength * (1/improvement_rate)) + 1
-
-    #if we are moving down, large decreases indicates we are exiting an optimal search space
-    #and should thus start increasing our mutation rate to find a new one. If the decreases are small,
-    # we could be finely navigating an area and should thus slow our mutation rate to comb over search space
-    else :
-        mutation_strength = int(abs(improvement_rate) * mutation_strength) + 2
-
-    
     print(f"Current Iteration Best: {top_five[0].fom}")
     print(f"Previous Best: {previous_fom}")
     print(f"Average change over the last 4: {avg_grad}")
     print(f"Average change over the last 15: {normalized_grad}")
     print(f"Improvemt Rate: {improvement_rate}")
+
+    # initiate extinction event if neccessary
+    if len(previous_foms) > 100 and abs(normalized_grad) < .004:
+        mutation_strength = 25
+        print(f"Have not converged to a solution and minimal change in FOM, initiating extinction...")
+        return mutation_strength
+
+    #set LMR
+    mutation_strength = 1
+
+    #if we are moving up, large increases means slow down and investigate sorroundings, hence 
+    # it is inversely proportional to gradient. In the case that the average gradient is small
+    # it is still likely to be N(.000064), {N<10} so mutation strength should remain reasonable
+    if avg_grad > 0:
+        mutation_strength = int(mutation_strength * (1/(improvement_rate+gamma))) + 1
+
+    #if we are moving down, large decreases indicates we are exiting an optimal search space
+    #and should thus start increasing our mutation rate to find a new one. If the decreases are small,
+    # we could be finely navigating an area and should thus slow our mutation rate to comb over search space
+    else :
+        mutation_strength = int(abs(improvement_rate*gamma) * mutation_strength) + 1
+
+    
 
     return mutation_strength
 
@@ -228,28 +239,46 @@ top_five = sort_by_fom(iteration_configs)[:5]
 
 # Ensure loss function is decreasing
 i = 1
-previous_foms = get_last_fom_values(history_file, 100)
+previous_foms = get_last_fom_values(history_file, 500)
 
-#hyperparameter to decide genetic variance
-alpha = 12
+#hyperparameters to decide ramge of genetic variance
+alpha = 12 #for first equation, coefficient to bias what range of mutation what
+gamma = (1/2) #for second equation, 1/gamma = max possible mutation strength
+mutation_strength = alpha  #for first run
 
 #stopping conditions, if fom is good continue, if fom is really good or loss is bad exit
 while previous_foms and i <= len(previous_foms):
     previous_fom = previous_foms[-i]  # Check the most recent FOM values
-    if top_five[0].fom >= .90:
-        print("FOM exceeds .90")
-        cleanup(results_directory)
+    if top_five[0].fom >= .99:
+        write_fom_to_history(history_file, top_five[0].fom)
+        write_fom_to_history(file_history, top_five[0].filename)
+        write_fom_to_history(array_history, top_five[0].hole_matrix)
+        print("FOM exceeds .99")
         exit()
     if i == 1:
 
         #calculate mutation strength:
 
         #proceed to less aggressive mutation rate after 20 iterations
-        if(len(previous_foms) > 20):
-            mutation_strength = int(long_term_LMR(top_five,previous_foms)) + 1
+        # if(len(previous_foms) > 50):
+        #     mutation_strength = int(long_term_LMR(top_five,previous_foms,gamma))
+        # else:
+        mutation_strength = int((1 - ((top_five[0].fom - previous_fom) / previous_fom) * alpha)) + 1
 
-        else:
-            mutation_strength = (1 - ((top_five[0].fom - previous_fom) / previous_fom) * alpha) + 1
+
+        #testing Jay's alg
+        # if(previous_fom > .95):
+        #     mutation_strength = 1
+        # elif(previous_fom > .90):
+        #     mutation_strength = 2
+        # elif(previous_fom > .85):
+        #     mutation_strength = 3
+        # elif(previous_fom > .80):
+        #     mutation_strength = 4
+        # elif(previous_fom > .70):
+        #     mutation_strength = 5
+        # else:
+        #     mutation_strength = 7
 
         print(f"Mutation Strength: {mutation_strength}")
         break
@@ -479,10 +508,13 @@ SETUP_SCRIPT = r'''
 
 '''
 
+#run again for insurance
+cleanup(results_directory)
+
 i = 1 #iterator marker
 num_child_configs = 9 #number of child configurations we want to generate per each sim
 
-iteration_num = len(previous_foms) #number of iterations is marked by number of foms stored to history
+iteration_num = 1 #number of iterations is marked by number of foms stored to history
 for configuration in top_five:
     #now we just use run_simulation.py within a for loop
 
