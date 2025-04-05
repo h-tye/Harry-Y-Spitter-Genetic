@@ -11,5 +11,26 @@ FOM = 1 - (abs(T_thru_avg - T_thru_ideal) + abs(T_cross_avg - T_cross_ideal))
 A genetic algorithm based off the FOM was then used to selectively search for the best configuration.
 
 # Genetic Algorithm
+The basic pipeline of the current genetic algorithm as follows:
+  1. Generate 50 random configurations
+  2. Run sim on configurations, retrieve the 5 best configurations(based by FOM)
+  3. Generate 9 children for each of the best 5
+     a. Children are made by randomly toggling a certain number of pixels within the parent structure. Hence we are introducing "mutations" to the children.
+     b. The best configuration will have the lowest mutation rate(LMR) and we gradually increase the mutation rate for the next 4. For example, if our LMR is 1
+     then the best configuration will generate 9 children that have 1 randomly mutated pixel. The second best configuartion will generate 9 children that have 2
+     mutated pixels, etc.
+  4. We then generate 5 more moderately random sims, typically with a mutation rate of 25 to ensure genetic variance within the generation.
+  5. This then comprises the next generation where we will run steps 2-4 until a desirable FOM is achieved or some other terminal condition is reached.
+This pipeline is implemented within /src/genetic_alg.py
 
+# Lowest Mutation Rate(LMR)
+The amount of genetic variance we introduce into a generation is determined by the lowest mutation rate(LMR). This parameter is extremely crucial in determining convergence to optimal solutions with the search space. Since we are using a 20 x 20 binary grid, we can expect a search space of 2^400 possible configurations. From what I have seen, the search space is extremely sensitive and a large LMR is likely to skip over high FOM regions. For context, a generation of 50 sims that only differed by 1 pixel produced a FOM range of around 15%. For this reason, I have designed the LMR to remain under 3 for most contexts.
+
+Another feature to consider is to have an adaptive LMR. Due to the reasons mentioned above, it would be risky to keep the LMR at 3+ if we have just made a huge improvement in our FOM. Instead, we want to slow down the mutation rate so that we can comb over the local search space and look for any extrema. Additionally, we don't want to keep the LMR small if our FOM has not improved over the past 5 generations. Thus the LMR should be a function of the FOM such that large increases correspond to low LMR and vice versa. 
+
+The current LMR equation is as shown:
+
+LMR = floor(1 - ((current_generation_best - previous_generation_best) / previous_generation_best) * alpha ) + 1
+
+Alpha is hyperparameter that configures LMR senstivity to recent changes. We add 1 to the result to ensure that LMR is never 0. 
 
