@@ -6,7 +6,6 @@ from typing import Optional, Union, Dict
 
 from out import get_lsf_path
 from out import get_results_path
-from src.compile_data import get_compile_data_path
 from src.functions.param_to_combinations import param_to_combinations
 from src.functions.process_scripts import process_scripts
 from src.lsf_scripts import get_lsf_scripts_path
@@ -61,7 +60,6 @@ def create_lsf_script_sweep(
     data_location.mkdir(exist_ok=True)
     location_str = str(location).replace("\\", "/")
     data_location_str = str(data_location).replace("\\", "/")
-    compile_data_py_str = str(get_compile_data_path()).replace("\\", "/")
 
     files = {}
     for i, parameter in enumerate(param_to_combinations(parameters)):
@@ -76,23 +74,4 @@ def create_lsf_script_sweep(
     if not with_slurm:
         return files
 
-    # slurm_lsf = get_lsf_scripts_path().joinpath("lsf.slurm").read_text(encoding="utf-8")
-    # slurm_lsf = slurm_lsf.replace("@name@", f"{script_name}")
-    # slurm_lsf = slurm_lsf.replace("@RunDirectoryLocation@", location_str)
-    # slurm_lsf = slurm_lsf.replace("@DataDirectoryLocation@", data_location_str)
-    # location.joinpath(f"{script_name}.lsf.slurm").write_text(slurm_lsf, encoding="utf-8")
-
-    # slurm_compile = get_lsf_scripts_path().joinpath("compile.slurm").read_text(encoding="utf-8")
-    # slurm_compile = slurm_compile.replace("@name@", f"{script_name}_compile")
-    # slurm_compile = slurm_compile.replace("@RunDirectoryLocation@", location_str)
-    # slurm_compile = slurm_compile.replace("@DataDirectoryLocation@", data_location_str)
-    # slurm_compile = slurm_compile.replace("@compile_data_py@", compile_data_py_str)
-    # location.parent.joinpath(f"{script_name}.compile.slurm").write_text(slurm_compile, encoding="utf-8")
-
-    # lsf_script = get_lsf_scripts_path().joinpath("sbatch.lsf").read_text(encoding="utf-8")
-    # lsf_script = lsf_script.replace("@name@", f"{script_name}")
-    # lsf_script = lsf_script.replace("@RunDirectoryLocation@", location_str)
-    # lsf_script = lsf_script.replace("@DataDirectoryLocation@", data_location_str)
-    # lsf_script = lsf_script.replace("@compile_data_py@", compile_data_py_str)
-    # location.joinpath(f"{script_name}.sbatch.lsf").write_text(lsf_script, encoding="utf-8")
     return files

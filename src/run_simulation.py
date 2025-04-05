@@ -1,11 +1,5 @@
 from __future__ import annotations
-
-import argparse
-import copy
-import itertools
-import json
 from hashlib import sha256
-from typing import Union, Dict, List, Optional
 from pathlib import Path
 import sys
 
@@ -16,25 +10,18 @@ base_path = str(Path(__file__).resolve().parent.parent)
 sys.path.append(base_path)  # Adds the parent directory
 
 
-from out import get_output_path
 from src.functions.__const__ import HASH_LENGTH
 from src.functions.lsf_script import create_lsf_script
-from src.functions.lsf_script import create_lsf_script_sweep
-from src.functions.run_sim import run_sweep
 from out import get_lsf_path
 from out import get_results_path
-from src.compile_data import get_compile_data_path
-from src.functions.param_to_combinations import param_to_combinations
-from src.functions.process_scripts import process_scripts
 from src.lsf_scripts import get_lsf_scripts_path
 
+
+# This is a template of an individual simulation script that will be generated for each configuration
 SETUP_SCRIPT = r'''
     deleteall;
     clear;
     switchtolayout;
-
-
-    #base simulation, this is a model of what "should" be created by our run_simulation script
 
     #define grid size dimensions
     grid_size_x = 20;
@@ -179,7 +166,7 @@ SETUP_SCRIPT = r'''
     addstructuregroup;
     set('name', 'hole_array');
 
-    #define srating hole pattern
+    #define srating hole pattern, this is the array of 0s and 1s that will be used to create the holes
     holeArray = {configuration};
     holeMatrix = "";
 
@@ -225,63 +212,9 @@ SETUP_SCRIPT = r'''
 
 '''
 
-
-# class Component:
-#     instruction_syntax = "[r|]:<component_name>|*:<parameter_name>|*:[<value>|<min>:<max>:<num>]"
-
-#     def __init__(self, sweep_str: str):
-#         self.sweep_str = sweep_str
-
-#         component = sweep_str.split(":")
-#         if not (len(component) == 4 or len(component) == 6):
-#             raise ValueError(
-#                 f"Invalid component parameter format: {sweep_str!r} "
-#                 f"(incorrect number of ':'s) (expected {self.instruction_syntax})"
-#             )
-
-#         self.types: List[str] = sorted(component[0].lower().split("|"))
-#         self.names: List[str] = sorted(component[1].split("|"))
-#         self.parameters: List[str] = sorted(component[2].split("|"))
-#         self.value: Optional[str] = component[3] if len(component) == 4 else None
-#         self.min: Optional[float] = component[3] if len(component) == 6 else None
-#         self.max: Optional[float] = component[4] if len(component) == 6 else None
-#         self.num: Optional[int] = int(component[5]) if len(component) == 6 else None
-
-#         if all(i not in ["r", ""] for i in self.types):
-#             raise ValueError(f"Invalid component type: {self.types!r} not in ['r', '']")
-
-#         if "" in self.types and len(self.types) > 1:
-#             raise ValueError(f"Invalid component type: {self.types!r} contains '' and other types")
-
-#         if self.value is not None:
-#             if self.min is not None or self.max is not None or self.num is not None:
-#                 raise ValueError(
-#                     f"Invalid component parameter format: {sweep_str!r} "
-#                     f"(value given with min/max/num) (expected {self.instruction_syntax})"
-#                 )
-#         else:
-#             if self.min is None or self.max is None or self.num is None:
-#                 raise ValueError(
-#                     f"Invalid component parameter format: {sweep_str!r} "
-#                     f"(no value given with min/max/num) (expected {self.instruction_syntax})"
-#                 )
-
-#             self.min = float(self.min)
-#             self.max = float(self.max)
-#             self.num = int(self.num)
-
-#     def __repr__(self):
-#         return f"Component({self.sweep_str!r})"
-
-#     @property
-#     def short_repr(self):
-#         if self.value is not None:
-#             return f"{self.types}:{self.names}:{self.parameters}:{self.value}"
-
-#         return f"{self.types}:{self.names}:{self.parameters}"
-
+#Convert a Pandas DataFrame into a formatted matrix string
 def format_matrix_string(df: pd.DataFrame) -> str:
-    #Convert a Pandas DataFrame into a formatted matrix string.
+    
     matrix_str = "[ "  # Start the matrix string
 
     for i, row in df.iterrows():
@@ -294,34 +227,7 @@ def format_matrix_string(df: pd.DataFrame) -> str:
     return matrix_str
 
 
-
-#main 
-
-# .92 FOM, new model
-# [[0. 1. 0. 0. 0. 1. 0. 1. 0. 0. 0. 0. 1. 0. 0. 0. 1. 1. 1. 1.]
-#  [1. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 1. 0. 1. 1. 0. 0. 1. 0.]
-#  [1. 1. 0. 0. 0. 0. 0. 0. 1. 0. 0. 0. 0. 0. 0. 1. 0. 0. 1. 0.]
-#  [0. 1. 1. 0. 0. 0. 0. 1. 0. 0. 0. 1. 0. 1. 1. 1. 0. 1. 1. 0.]
-#  [1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 0. 1. 1. 0. 1. 1. 1. 1.]
-#  [0. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.]
-#  [1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 0. 1. 1. 1.]
-#  [1. 0. 1. 1. 1. 1. 1. 1. 1. 0. 1. 0. 1. 1. 1. 0. 1. 1. 1. 0.]
-#  [0. 0. 1. 1. 1. 0. 0. 0. 1. 0. 0. 0. 0. 0. 1. 1. 0. 1. 1. 1.]
-#  [1. 1. 1. 1. 1. 1. 0. 1. 0. 0. 1. 0. 0. 1. 0. 0. 1. 1. 1. 1.]
-#  [0. 0. 0. 1. 0. 0. 0. 0. 1. 0. 0. 1. 0. 1. 0. 0. 0. 1. 1. 1.]
-#  [0. 1. 1. 0. 1. 0. 1. 1. 0. 0. 0. 1. 0. 0. 0. 0. 0. 1. 1. 1.]
-#  [0. 0. 0. 1. 1. 1. 1. 0. 0. 1. 1. 0. 0. 1. 0. 0. 0. 1. 1. 0.]
-#  [1. 0. 0. 1. 1. 0. 1. 0. 1. 0. 0. 0. 1. 0. 0. 1. 0. 0. 0. 0.]
-#  [1. 1. 1. 0. 0. 0. 1. 1. 1. 0. 1. 1. 0. 0. 1. 1. 1. 0. 0. 1.]
-#  [0. 0. 1. 1. 1. 1. 1. 1. 1. 1. 0. 1. 0. 1. 1. 1. 1. 0. 0. 0.]
-#  [0. 0. 1. 0. 0. 1. 0. 1. 0. 0. 0. 1. 0. 0. 1. 1. 0. 0. 0. 0.]
-#  [0. 1. 0. 1. 0. 0. 0. 0. 1. 1. 0. 0. 0. 1. 0. 1. 1. 0. 1. 0.]
-#  [0. 1. 0. 1. 1. 1. 0. 1. 0. 1. 1. 0. 1. 0. 1. 1. 1. 0. 0. 1.]
-#  [0. 1. 1. 1. 1. 0. 0. 0. 0. 1. 0. 1. 0. 1. 0. 1. 1. 0. 1. 1.]]
-
-
-
-# Define the original "ideal" configuration as numpy array
+# Define our starting configuration
 hole_array = pd.DataFrame([
     [0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1,],
     [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1, 0,],
@@ -345,30 +251,32 @@ hole_array = pd.DataFrame([
     [0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1,]
 ])
 
+#generate 50 child configurations from the starting configuration
 for simulation_num in range(50):
 
-    prefix_name = f"simulation_"
-    # if parsed_args.ename is not None:
-    #     prefix_name = prefix_name + f"{parsed_args.ename}"
-
+    #define script name 
     script_name = (
-        f'{prefix_name}'
+        f'simulation_'
         f'_startup'
     )
     print(f"Script name: {script_name}")
 
+    # Create a copy of the original array so we don't modify our starting point
+    hole_array_temp = hole_array.copy()
 
-    setup_script = SETUP_SCRIPT
-    setup_script = setup_script.replace('{configuration}',format_matrix_string(hole_array))
-
-    # generate a new configuration
-    # Randomly toggle every index so we pull all truly random configs, broadens our initial search space
+    # generate a new configuration by toggling 1 pixel in our starting configuration
     for _ in range(1):
         row, col = np.random.randint(0, 20, size=2)  # Random row & column index
-        hole_array.iloc[row, col] = 1 - hole_array.iloc[row, col]  # Toggle 0, 1
+        hole_array_temp.iloc[row, col] = 1 - hole_array.iloc[row, col]  # Toggle 0, 1
 
+
+    #replace the configuration in the setup script with the current configuration
+    setup_script = SETUP_SCRIPT
+    setup_script = setup_script.replace('{configuration}',format_matrix_string(hole_array_temp))
+
+    #define args for lsf script generation, this will ensure unique names for each script
     common_args = dict(
-        parameters=format_matrix_string(hole_array),
+        parameters=format_matrix_string(hole_array_temp),
         setup_script=setup_script,
         script_name=script_name,
     )
@@ -379,13 +287,16 @@ for simulation_num in range(50):
     )
 
 
+# Generate supplementary scripts for the simulation and handle any data cleanup
+
+
 #first clear FOM_history file for new batch
 base_directory = Path(__file__).resolve().parent.parent
 history_file = base_directory / "out" / "results" / "FOM_history.txt"
 with open(history_file, "w") as file:
     pass  # No need to write anything; opening in "w" mode clears the file
 
-#generate slurm file for all scripts, code pulled from lsf.py 
+# Generate slurm file for all scripts, code pulled from lsf.py 
 location = get_lsf_path()
 data_location = get_results_path()
 
@@ -394,8 +305,7 @@ data_location = data_location.joinpath(script_name).absolute()
 
 location.mkdir(exist_ok=True)
 
-#move lsf scripts we created into directory
-# Construct paths correctly
+# Move lsf scripts we created into our sim directory
 source_path = Path(__file__).resolve().parent.parent / "out" / "lsf"
 destination_path = source_path / script_name  # Avoid string concatenation
 
@@ -407,9 +317,9 @@ file_prefix = script_name  # No trailing backslash
 # Ensure the destination folder exists
 destination_folder.mkdir(parents=True, exist_ok=True)
 
-#expected number of simulation files genereated, need for slurm
-
+# Number of simulation files genereated, needed as argument for slurm script
 expected_files = 0
+
 # Move files with correct glob pattern
 for file in source_folder.glob(file_prefix + "*"):  # Matches files starting with script_name
     if file.is_file():  
@@ -424,8 +334,9 @@ data_location.mkdir(exist_ok=True)
 print(f'{data_location}')
 location_str = str(location).replace("\\", "/")
 data_location_str = str(data_location).replace("\\", "/")
-compile_data_py_str = str(get_compile_data_path()).replace("\\", "/")
 
+
+# Generate slurm and lsf scripts for the simulation
 slurm_lsf = get_lsf_scripts_path().joinpath("lsf.slurm").read_text(encoding="utf-8")
 slurm_lsf = slurm_lsf.replace("@name@", f"{script_name}")
 slurm_lsf = slurm_lsf.replace("@ExpectedFiles",f"{expected_files}")
@@ -437,7 +348,6 @@ lsf_script = get_lsf_scripts_path().joinpath("sbatch.lsf").read_text(encoding="u
 lsf_script = lsf_script.replace("@name@", f"{script_name}")
 lsf_script = lsf_script.replace("@RunDirectoryLocation@", location_str)
 lsf_script = lsf_script.replace("@DataDirectoryLocation@", data_location_str)
-lsf_script = lsf_script.replace("@compile_data_py@", compile_data_py_str)
 location.joinpath(f"{script_name}.sbatch.lsf").write_text(lsf_script, encoding="utf-8")
 
 

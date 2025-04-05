@@ -1,52 +1,10 @@
 #File structure:
-# 1. Pull data from txt file
+# 1. Pull data from results file
 # 2. Check FOM
 # 3. If FOM is good for any design, return and cleanup
 # 4. Check FOM with previous best FOMs to make sure loss is decreasing
 # 5. Run genetic component to get hole matrices
 # 6. Using these matrices, generate 20-25 new files, repeat
-
-# Psuedo
-# class configuration(
-#     private:
-#         holeMatrix;
-#         FOM;
-# )
-
-# vector<configuration> iteration_configs
-
-# for( files in results_directory){
-#     if(last4(filename) == ".txt"){
-
-#         configuation current_config;
-#         configuartion.holeMatrix = read_in_txt_matrix(file);
-#         configuration.FOM = read_in_txt_fom(file);
-#         iteration_configs.push_back(current_config);
-
-        
-#     }
-# }
-    
-
-# sort_by_fom(iteration_configs);
-# vector<configuration> top_five;
-# for(i in 5){
-#     top_five.push_back(iteration_configs(i));
-# }
-
-# # psuedo
-
-# #ensure loss function decreasing
-# do{
-#     previous_FOM = read("FOM_history", last_line - i);
-#     if(i > 5){
-#         print("Loss has not decreased past 5 iterations");
-#         exit;
-#     }
-#     i++;
-# }while(previous_FOM < top_five[:1].FOM);
-
-# write("FOM_history", top_five[:1].FOM);
 
 import os
 from pathlib import Path
@@ -59,13 +17,8 @@ sys.path.append(base_path)  # Adds the parent directory
 from out import get_output_path
 from src.functions.__const__ import HASH_LENGTH
 from src.functions.lsf_script import create_lsf_script
-from src.functions.lsf_script import create_lsf_script_sweep
-from src.functions.run_sim import run_sweep
 from out import get_lsf_path
 from out import get_results_path
-from src.compile_data import get_compile_data_path
-from src.functions.param_to_combinations import param_to_combinations
-from src.functions.process_scripts import process_scripts
 from src.lsf_scripts import get_lsf_scripts_path
 
 class Configuration:
@@ -258,27 +211,7 @@ while previous_foms and i <= len(previous_foms):
     if i == 1:
 
         #calculate mutation strength:
-
-        #proceed to less aggressive mutation rate after 20 iterations
-        # if(len(previous_foms) > 50):
-        #     mutation_strength = int(long_term_LMR(top_five,previous_foms,gamma))
-        # else:
         mutation_strength = int((1 - ((top_five[0].fom - previous_fom) / previous_fom) * alpha)) + 1
-
-
-        #testing Jay's alg
-        # if(previous_fom > .95):
-        #     mutation_strength = 1
-        # elif(previous_fom > .90):
-        #     mutation_strength = 2
-        # elif(previous_fom > .85):
-        #     mutation_strength = 3
-        # elif(previous_fom > .80):
-        #     mutation_strength = 4
-        # elif(previous_fom > .70):
-        #     mutation_strength = 5
-        # else:
-        #     mutation_strength = 7
 
         print(f"Mutation Strength: {mutation_strength}")
         break
@@ -511,43 +444,42 @@ SETUP_SCRIPT = r'''
 #run again for insurance
 cleanup(results_directory)
 
-i = 1 #iterator marker
+i = 1 #iterator marker for script name
 num_child_configs = 9 #number of child configurations we want to generate per each sim
 
-iteration_num = 1 #number of iterations is marked by number of foms stored to history
+#loop through top 5 configurations and generate children for each of them
 for configuration in top_five:
-    #now we just use run_simulation.py within a for loop
 
-    #pull hole array from what we are currently
+    #pull hole array from the configuration we are working with
     hole_array = configuration.hole_matrix
 
-    #for each configuration, generate 4 child configs
+    # then for each configuration, generate corresponding number of child configs
     for simulation_num in range(num_child_configs):
 
-        #script name = iteration + accuracy marker(1-5) + individual simulation_num
+        #individual script name = iteration + accuracy marker(1-5) + individual simulation_num
         script_name = (
             f'simulation_'
-            f'_iteration_num'
-            f'{iteration_num}_'
             f'{i}_'
             f'{simulation_num}'
         )
 
-        # for each child config, randomly toggle 10*i indices
+        #create a copy of the hole array to work with so we don't modify the original
+        hole_array_temp = hole_array.copy()
+
+        # for each child config, randomly toggle mutation_strenght*i indices
         # we toggle more indices as the sims get less accurate
-        # Ex. top configuartion will generate 4 children, each with 5 toggled pizels
-        # 2nd config will genereate 4 children, each with 20 toggled pixels, etc
+        # Ex. top configuartion will toggle 5 pixels, 2nd config will toggle 10, etc
         for _ in range(mutation_strength*i):
             local_mutation = mutation_strength*i
             row, col = np.random.randint(0, 20, size=2)  # Random row & column index
-            hole_array.iloc[row, col] = 1 - hole_array.iloc[row, col]  # Toggle 0, 1
+            hole_array_temp.iloc[row, col] = 1 - hole_array.iloc[row, col]  # Toggle 0, 1
         
 
         setup_script = SETUP_SCRIPT
-        setup_script = setup_script.replace('{configuration}',format_matrix_string(hole_array))
+        setup_script = setup_script.replace('{configuration}',format_matrix_string(hole_array_temp))
 
         common_args = dict(
-            parameters=format_matrix_string(hole_array),
+            parameters=format_matrix_string(hole_array_temp),
             setup_script=setup_script,
             script_name=script_name,
         )
@@ -568,14 +500,12 @@ for simulation_num in range(5):
     #unique name for randoms
     script_name = (
         f'simulation_'
-        f'_iteration_num'
-        f'{iteration_num}_'
         f'random_'
         f'{simulation_num}'
     )
 
     #randomly toggle every pixel
-    for _ in range(400):
+    for _ in range(25):
         row, col = np.random.randint(0, 20, size=2)  # Random row & column index
 
         #hole array is from last defined one, doesn't matter because we alter everything anyways
@@ -602,8 +532,6 @@ data_location = get_results_path()
 
 script_name = (
         f'simulation_'
-        f'_iteration_num'
-        f'{iteration_num}_'
 )
 location = location.joinpath(script_name).absolute()
 data_location = data_location.joinpath(script_name).absolute()
@@ -618,18 +546,13 @@ destination_path = source_path / script_name  # Avoid string concatenation
 source_folder = Path(source_path)
 destination_folder = Path(destination_path)
 
-file_prefix = (
-            f'simulation_'
-            f'_iteration_num'
-            f'{iteration_num}_'  
-        )# No trailing backslash
 
 # Ensure the destination folder exists
 destination_folder.mkdir(parents=True, exist_ok=True)
 
 expected_files = 0
 # Move files with correct glob pattern
-for file in source_folder.glob(file_prefix + "*"):  # Matches files starting with script_name
+for file in source_folder.glob(script_name + "*"):  # Matches files starting with script_name
     if file.is_file():  
         file.rename(destination_folder / file.name)  
         #print(f"Moved: {file} → {destination_folder}")
@@ -642,7 +565,6 @@ data_location.mkdir(exist_ok=True)
 #print(f'{data_location}')
 location_str = str(location).replace("\\", "/")
 data_location_str = str(data_location).replace("\\", "/")
-compile_data_py_str = str(get_compile_data_path()).replace("\\", "/")
 
 slurm_lsf = get_lsf_scripts_path().joinpath("lsf.slurm").read_text(encoding="utf-8")
 slurm_lsf = slurm_lsf.replace("@name@", f"{script_name}")
@@ -655,5 +577,4 @@ lsf_script = get_lsf_scripts_path().joinpath("sbatch.lsf").read_text(encoding="u
 lsf_script = lsf_script.replace("@name@", f"{script_name}")
 lsf_script = lsf_script.replace("@RunDirectoryLocation@", location_str)
 lsf_script = lsf_script.replace("@DataDirectoryLocation@", data_location_str)
-lsf_script = lsf_script.replace("@compile_data_py@", compile_data_py_str)
 location.joinpath(f"{script_name}.sbatch.lsf").write_text(lsf_script, encoding="utf-8")

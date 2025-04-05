@@ -34,7 +34,7 @@ run_on_exit() {
   echo "Waiting for $EXPECTED_FILES .completed.txt files in $RunDirectoryLocation..."
 
   #run multiple iterations to ensure files are created
-  for (( i = 1; i < 7; i++ )); do
+  for (( i = 1; i < 20; i++ )); do
     #If directory is good, now run generated sims
     echo "Running bash file to execute individual sims";
     bash run_individual_sims.sh
