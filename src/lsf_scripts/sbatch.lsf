@@ -2,7 +2,8 @@ deleteall;
 clear;
 switchtolayout;
 clearfunctions;
-#find lsf files
+
+# carry out this process 50 times for the 50 sims generated, this will need to be changed manually if batch size is altered
 for(k = 0;k < 50; k = k + 1) {
 	
     #find lsf files generated
@@ -29,14 +30,18 @@ for(k = 0;k < 50; k = k + 1) {
 	}
 	
 	#grab one of the lsf files
-	random_filename = lsf_files{k+1};	
+	random_filename = lsf_files{k+1};
+
+	#generate filenames for supplementary files we are about to create	
 	lms_filename = replacestring(random_filename, ".lsf", ".lms");
 	load_and_run_filename = replacestring(random_filename, ".run.lsf",".load.lsf");
 	completed_filename = replacestring(random_filename, ".run.lsf",".completed.txt");
+
+	# create random id so we have unique filenames
 	random_id = rand(1, 10000000, 2);
 	random_id = num2str(random_id);
 	
-	#create script where we'll load generated lms file and run it
+	#create script where we'll load a run lms file, gather data, and store it to text
 	write(load_and_run_filename, "load(\"" + lms_filename + "\");", "overwrite");
 	write(load_and_run_filename, "write(\"load_and_run_logger.txt\", \"This is a test\", \"overwrite\");", "append");
 	write(load_and_run_filename, "T_source = getresult(\"mon_source\",\"T\");","append");
@@ -57,8 +62,8 @@ for(k = 0;k < 50; k = k + 1) {
 	write(load_and_run_filename, "write(txt_file, FOM, \"append\");","append");	
 	write(load_and_run_filename, "write(completed_file, \"Sim is done\", \"overwrite\");","append");
 
-	#generate corresponding slurm file to run the load and run lsf file
-	# Define the SLURM script content as a string
+	# generate corresponding slurm file to run the load and run lsf file as well as the lms file
+	# this is the same format as the base slurm and could definitely be made more simple
 	slurm_script_content = "#!/bin/bash\n" +
 		                   "#SBATCH --job-name=" + load_and_run_filename + "\n" +
 		                   "#SBATCH --output=slurm_%x_%A.log\n" +
@@ -153,16 +158,23 @@ for(k = 0;k < 50; k = k + 1) {
 		                   "  mv \"$file\" \"$new_file\";\n" +
 		                   "done\n\n" +
 		                   "exit $EXIT_CODE;\n";
+
+	# filename creation
 	write("basic_sim" + num2str(k) + ".run.slurm", slurm_script_content, "overwrite");
 
 
-	#evaluate script to generate lms file, need to store iterator to file b/c feval() destroys env variables
+	#need to store iterator to file b/c feval() destroys local environment variables
     write("iterator.txt",num2str(k), "overwrite");
+
+	# evaluate script to generate lms file, 
 	feval(random_filename);
-    print("Reached feval()");	
+    
+	#read back iterator, this needs to be done or you will enter an infinite loop
 	k = read("iterator.txt");
 	k = str2num(k);
 }
+
+# generate bash file to run all the individual sims
 
 bash_base = "#!/usr/bin/env bash\n";
 write("run_individual_sims.sh",bash_base,"overwrite");

@@ -16,7 +16,7 @@
 source "${HOME}/.bashrc";
 module load intel intel-mpi lumerical;
 
-# Expected number of completed simulation txt files
+# Expected number of completed simulation txt files, directory locations
 EXPECTED_FILES=@ExpectedFiles
 OutFileLocation="${HOME}/slurm_${SLURM_JOB_NAME}_${SLURM_JOB_ID}.log";
 RunDirectoryLocation="@RunDirectoryLocation@";
@@ -29,14 +29,20 @@ echo "DataDirectoryLocation: ${DataDirectoryLocation}";
 mkdir -p $DataDirectoryLocation;
 EXIT_CODE=1;
 
+
+# this is done 2nd, handles all the post-processing and genetic alg execution
 run_on_exit() {
 
   echo "Waiting for $EXPECTED_FILES .completed.txt files in $RunDirectoryLocation..."
 
-  #run multiple iterations to ensure files are created
+  # loop to carry out execution of sims and error handling if sims failed
+
+  # increase or decrease length of loop to how you see fit
   for (( i = 1; i < 20; i++ )); do
-    #If directory is good, now run generated sims
+
     echo "Running bash file to execute individual sims";
+
+    # Submit bash file that will execute all of the individual slurm files
     bash run_individual_sims.sh
     EXIT_CODE=$?
 
@@ -47,27 +53,28 @@ run_on_exit() {
     fi
 
     LAST_MODIFIED_TIME=$(date +%s);
-    # Wait until all completed files are found
+
+    # Wait until all sims in the generation have an oppurtunity to run, shouldn't take more than a minute
     while true; do
         # Count the number of ".completed.txt" files using `find` (more robust than `ls`)
         COMPLETED_COUNT=$(find "$RunDirectoryLocation" -maxdepth 1 -type f -name "*.completed.txt" | wc -l)
         echo "Completed files: $COMPLETED_COUNT "
 
-        # Check if all files are generated
+        # Check if all files are generated, exit while loop if they have
         if [[ $COMPLETED_COUNT -ge $EXPECTED_FILES ]]; then
             echo "All $EXPECTED_FILES .completed.txt files detected. Proceeding to next step..."
             EXIT_CODE=0
             break
         fi
 
-        # Check for timeout
+        # If sims haven't been completed in a minute, exit while loop and resubmit
         current_time=$(date +%s)
         echo "Current Time: $current_time"
         echo "Last modified time: $LAST_MODIFIED_TIME"
         time_difference=$((current_time - LAST_MODIFIED_TIME))
         if [[ $time_difference -gt 60 ]]; then
             echo "Not all sims were completed after 60 seconds, Retrying."
-            # Kill the process if necessary (ensure $process_id is defined elsewhere)
+            # Kill the process if necessary 
             if [[ -n $process_id ]]; then
                 kill -15 "$process_id" 2>/dev/null
                 kill -9 "$process_id" 2>/dev/null
@@ -80,13 +87,14 @@ run_on_exit() {
         sleep 30
     done
 
+    # if our exit code is 0, all files generated and exit loop
     if [ $EXIT_CODE -eq 0 ]; then
       break;
     fi
   
   done
 
-  #if we have gone through 4 iterations and all failed, exit
+  #if we have gone through the loop and our exit code is still 1 then not all files have been generated and algorithm should stop
   if [ $EXIT_CODE -eq 1 ]; then
     echo "Unsuccessful run of sims"
     exit 1
@@ -94,6 +102,7 @@ run_on_exit() {
 
   echo "Executing Genetic Algorithm"
   
+  # Carry out genetic algorithm script
   python "${HOME}/Documents/Y_spitter/src/genetic_alg.py"
   EXIT_CODE=$?
 
@@ -170,8 +179,10 @@ cd $RunDirectoryLocation || exit 1;
 
 
 
+# this is run first
 
-
+# just run the sbatch script, everything else is logically not neccessary and can be removed if desired
+# once this is done, run_on_exit() will be called 
 EXIT_CODE=1;
 LAST_MODIFIED_TIME=$(date +%s);
 for (( i = 1; i < 2; i++ )); do
