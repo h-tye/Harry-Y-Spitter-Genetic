@@ -79,7 +79,11 @@ To run the project as is, follow these steps:
 3. Assuming no issues, that is all the steps neccessary to carry out the project. The genetic algorithm will run indefinitely until FOM > .99 is achieved or you have reached 200 generations (to change these terminating conditions, change genetic_alg.py line 252 and/or line 297).
 4. You will be able to track the FOM over time within out/results/FOM_history.txt
 
-If you would like to change the genetic algorithm logic, lines 241 - 300 are where the main "thinking" is done. The project should and continue as normal to any changes made here. If you want to increase the generation size, alter line 515. This will change the number of child configurations generated for each sim in the top 5. **If you alter generation size, you will also have to alter sbatch.lsf, line 6 so that the for loop iterates for the size of the generation**. 
+If you would like to change the genetic algorithm logic, lines 241 - 300 are where the main "thinking" is done. The project should continue as normal to any changes made here. 
+
+If you want to increase the generation size, alter line 515. This will change the number of child configurations generated for each sim in the top 5. **If you alter generation size, you will also have to alter sbatch.lsf, line 6 so that the for loop iterates for the size of the generation**. 
+
+# Debugging
 
 
    
