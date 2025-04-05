@@ -44,6 +44,7 @@ Thus the BSNN has shown initial promise of generating fast-converging starting p
 # Code Base Breakdown
 **This repository currently contains lots of irrelevant information for this project so the important details are broken down below**
 1. /src/
+
    a. Genetic_alg.py : Implementation of genetic algorithm. It retrieves the best 5 configurations of the current generation, carries out genetic algorithm logic, and then creates the next generation of sims and supplementary files.
    
    b. Run_simulation.py : This is almost the exact same as genetic_alg.py and could definitely be merged into it. However, currently it is the starting file to generate our first generation of sims based off an initial configuration.
@@ -51,6 +52,7 @@ Thus the BSNN has shown initial promise of generating fast-converging starting p
    c. Compile_data.py is not neccessary for this project
    
 3. /src/functions/
+
    a. lsf_script.py : Used in genetic_alg and run_simulation to generate an individual .lsf script based off the template we pass into it. This template is defined in the base file(genetic_alg, and run_sim).
    
    b. process_script.py : Adds final formatting and processing to lsf script. Note this is not neccessary and could just be included in the base template. The rest of the file just alters the filename to ensure  unique filenames for each sim.
@@ -58,12 +60,14 @@ Thus the BSNN has shown initial promise of generating fast-converging starting p
    c. The other files within this directory are not directly relevant to this project.
    
 5. /src/lsf_scripts/ **These are probably the most important files in this project.**
+
    a. lsf.slurm : This is a template of the slurm file needed to run this project on CRC. This file is needed for each generation to carry out running the sims and data storage. It will run sbatch.lsf(see below) and then carry out the execution of the child sims, wait for their completion, run genetic_alg.py, and then submit the next generations slurm file.
 
    b. sbatch.lsf : This is a "middleman" file that handles interaction between slurm and lumerical. Due to the nature of Lumerical, this file is neccessary to convert our simulation files(.lsf) into .lms files that can then actually be run. It also is responsible for generating individual sub-slurm files for each simulation so that every sim can be run. This file also generates another set of handler files that will load the results of the simulation, calculate the FOM, and store the results so that they can be accessed by our genetic algorithm script. Like lsf.slurm, this is a template file that must be generated for every generation.
 
    c. All the other files in this directory are not applicable to the project.
 7. /out/
+
    a. Will not contain any useful information until sims are run. However, the simulation files are stored within /out/lsf/{simulation_directory} and the results will be stored in /out/results. The results will include a history of the best FOM, the associated configuration of that FOM, and the associated sim file of that FOM.
    
    b. Also within /out/lsf/ is data_storage. This folder stores every sim config and its associated FOM. It's primary use is for training BSNN.
