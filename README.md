@@ -33,4 +33,13 @@ The current LMR equation is as shown:
 LMR = floor(1 - ((current_generation_best - previous_generation_best) / previous_generation_best) * alpha ) + 1
 
 Alpha is hyperparameter that configures LMR senstivity to recent changes. We add 1 to the result to ensure that LMR is never 0. 
+This LMR has provided the fastest convergence compared to other methods such as constant LMR and momementum-based LMR. 
+**LMR is/should be subject to change**
+
+# Beam Splitter Nueral Network(BSNN)
+BSNN initially was an attempt to train a CNN to recognize optimal features within our configurations and then generate a configuartion of high accuracy(FOM>.99). It was trained of 27K test configurations and acheived low loss within the test data. However, when run in a sim around 20% loss was seen and thus was not an accurate enough model to carry out its function. 
+That being said, when a BSNN generated configuration was used as a starting configuration to generate the first generation(as opposed to randomly generating children), convergence to high FOM regions(FOM > .85) was achieved in 2-7 generations. This is opposed to our original method which took 20-30 generations to reach the same level of FOM. Additionally, when a non-BSNN generated configuration with similar FOM was used as a starting position, the FOM degenerated for 10+ generations before increasing, leading to extremely slow convergence. 
+Thus the BSNN has shown initial promise of generating fast-converging starting positions and should continue to be investigated.
+
+
 
