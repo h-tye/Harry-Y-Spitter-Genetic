@@ -41,6 +41,24 @@ BSNN initially was an attempt to train a CNN to recognize optimal features withi
 That being said, when a BSNN generated configuration was used as a starting configuration to generate the first generation(as opposed to randomly generating children), convergence to high FOM regions(FOM > .85) was achieved in 2-7 generations. This is opposed to our original method which took 20-30 generations to reach the same level of FOM. Additionally, when a non-BSNN generated configuration with similar FOM was used as a starting position, the FOM degenerated for 10+ generations before increasing, leading to extremely slow convergence. 
 Thus the BSNN has shown initial promise of generating fast-converging starting positions and should continue to be investigated.
 
+# Use
+To run the project as is, follow these steps:
+1. From the base directory, run "bash lsf.sh". Or "cd src/" followed by "python3 run_simulation.py"
+2. Then run "sbatch out/lsf/simulation__startup/simulation__startup.lsf.slurm"
+3. Assuming no issues, that is all the steps neccessary to carry out the project. The genetic algorithm will run indefinitely until FOM > .99 is achieved or you have reached 200 generations (to change these terminating conditions, change genetic_alg.py line 252 and/or line 297).
+4. You will be able to track the FOM over time within out/results/FOM_history.txt
+
+If you would like to change the genetic algorithm logic, lines 241 - 300 are where the main "thinking" is done. The project should continue as normal to any changes made here. 
+
+If you want to increase the generation size, alter line 515. This will change the number of child configurations generated for each sim in the top 5. **If you alter generation size, you will also have to alter sbatch.lsf, line 6 so that the for loop iterates for the size of the generation**. 
+
+# Debugging
+The number 1 issue you will run into with this implementation is simulation failure. Since we are running the simulations on CRC's preempt partition, they are prone to failure and will usually only work after 2-3 tries. To get around this issue, the base slurm file(lsf.slurm, lines 37-81) will run the sims up to 20 times to ensure that all files are run correctly. Feel free to adjust this as neccessary. You will know this error has occured via the output log which will read "Unsuccessful run of sims".
+
+The next most frequent error is during the startup procedure. Occassionally, run_simulation.py does not always generate the 50 starting sims and as a result not all the neccessary supplementary files are created to carry out the sim. If this happens, just delete the simulation output directory and retry. 
+
+This isn't a debugging issue but you will find that your workspace will quickly become cluttered with output logs from these sims. I recommend running the file "clear_logs.py" from your log file directory occassionally to handle this. 
+
 # Code Base Breakdown
 **This repository currently contains lots of irrelevant information for this project so the important details are broken down below**
 1. /src/
@@ -72,23 +90,19 @@ Thus the BSNN has shown initial promise of generating fast-converging starting p
    
    b. Also within /out/lsf/ is data_storage. This folder stores every sim config and its associated FOM. It's primary use is for training BSNN.
 
-# Use
-To run the project as is, follow these steps:
-1. From the base directory, run "bash lsf.sh". Or "cd src/" followed by "python3 run_simulation.py"
-2. Then run "sbatch out/lsf/simulation__startup/simulation__startup.lsf.slurm"
-3. Assuming no issues, that is all the steps neccessary to carry out the project. The genetic algorithm will run indefinitely until FOM > .99 is achieved or you have reached 200 generations (to change these terminating conditions, change genetic_alg.py line 252 and/or line 297).
-4. You will be able to track the FOM over time within out/results/FOM_history.txt
 
-If you would like to change the genetic algorithm logic, lines 241 - 300 are where the main "thinking" is done. The project should continue as normal to any changes made here. 
-
-If you want to increase the generation size, alter line 515. This will change the number of child configurations generated for each sim in the top 5. **If you alter generation size, you will also have to alter sbatch.lsf, line 6 so that the for loop iterates for the size of the generation**. 
-
-# Debugging
-The number 1 issue you will run into with this implementation is simulation failure. Since we are running the simulations on CRC's preempt partition, they are prone to failure and will usually only work after 2-3 tries. To get around this issue, the base slurm file(lsf.slurm, lines 37-81) will run the sims up to 20 times to ensure that all files are run correctly. Feel free to adjust this as neccessary. You will know this error has occured via the output log which will read "Unsuccessful run of sims".
-
-The next most frequent error is during the startup procedure. Occassionally, run_simulation.py does not always generate the 50 starting sims and as a result not all the neccessary supplementary files are created to carry out the sim. If this happens, just delete the simulation output directory and retry. 
-
-This isn't a debugging issue but you will find that your workspace will quickly become cluttered with output logs from these sims. I recommend running the file "clear_logs.py" from your log file directory occassionally to handle this. 
-
-   
+# Technical Pipeline
+This will provide an explanation of the process behind the use:
+1. As explained above, run_simulation is called first to generate the first generation of sims as well as a lsf.slurm and sbatch.lsf file.
+2. The project is then submitted to CRC via the lsf.slurm file
+3. The slurm file then uses Lumerical MODE to carry out the sbatch.lsf script
+4. The sbacth script then loops through all of the lsf simulation scripts, creates a corresponding slurm file for the individual sim as well as a data proccessing lsf script.
+5. The sbatch script then generates an lms file of our sim. This is neccessary as Lumerical VarFDTD can only recieve lms files.
+6. The slurm file for each sim will then run this lms file as well as the data processing script so that the sim is run and data is stored.
+7. All of the individual slurm files are grouped together into "run_individual_sims.sh" which will submit each of the individual slurm files to CRC.
+8. At this point in the main lsf.slurm file, we call the function "run_on_exit()" which executes run_indivudal_sims.sh to begin simulating all of the individual sims.
+9. We then wait for all of the neccessary files to be completed. A sim will be marked as completed when it generates a file ending with ".completed.txt". T
+10. his is to indicate that the sim has successfully run and stored all neccessary data. Once the appropriate amount of completed files are genereated, the lsf.slurm file then carries out genetic_alg.py.
+11. Genetic_alg.py will create the next generation and its corresponding lsf.slurm file.
+12. Then from our original lsf.slurm file, we submit the next generations lsf.slurm file to kickstart the next generation. 
 
