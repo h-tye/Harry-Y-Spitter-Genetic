@@ -84,7 +84,11 @@ If you would like to change the genetic algorithm logic, lines 241 - 300 are whe
 If you want to increase the generation size, alter line 515. This will change the number of child configurations generated for each sim in the top 5. **If you alter generation size, you will also have to alter sbatch.lsf, line 6 so that the for loop iterates for the size of the generation**. 
 
 # Debugging
+The number 1 issue you will run into with this implementation is simulation failure. Since we are running the simulations on CRC's preempt partition, they are prone to failure any will usually only work after 2-3 tries. To get around this issue, the base slurm file(lsf.slurm, lines 37-81) will run the sims up to 20 times to ensure that all files are run correctly. Feel free to adjust this as neccessary. You will know this error has occured via the output log which will read "Unsuccessful run of sims".
 
+The next most frequent error is during the startup procedure. Occassionally, run_simulation.py does not always generate the 50 starting sims and as a result not all the neccessary supplementary files are created to carry out the sim. If this happens, just delete the simulation output directory and retry. 
+
+This isn't a debugging issue but you will find that your workspace will quickly become cluttered with output logs from these sims. I recommend running the file "clear_logs.py" from your log file directory occassionally to handle this. 
 
    
 
