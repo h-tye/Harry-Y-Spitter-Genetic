@@ -52,6 +52,9 @@ If you would like to change the genetic algorithm logic, lines 241 - 300 are whe
 
 If you want to increase the generation size, alter line 515. This will change the number of child configurations generated for each sim in the top 5. **If you alter generation size, you will also have to alter sbatch.lsf, line 6 so that the for loop iterates for the size of the generation**. 
 
+If you want to alter this project to run a different type of splitter ratio(perhaps 20/80 instead of 33/66), the only change to be made is within sbatch.lsf lines 53 and 54. This is where we define our "ideal" ratio so by altering this you will change how the FOM is calculated and thus what configuration the algorithm will converge to. 
+If you want to alter this project to run a different sim altogether, then the template within run_simulation.py(lines 21 ~ 210) will have to be changed accordingly along with the sbatch.lsf file(particularly lines 44-63). The algorithm may need some small tweaks depending on what your loss parameter is but the overall pipeline should be set to work with any other kind of sim. 
+
 # Debugging
 The number 1 issue you will run into with this implementation is simulation failure. Since we are running the simulations on CRC's preempt partition, they are prone to failure and will usually only work after 2-3 tries. To get around this issue, the base slurm file(lsf.slurm, lines 37-81) will run the sims up to 20 times to ensure that all files are run correctly. Feel free to adjust this as neccessary. You will know this error has occured via the output log which will read "Unsuccessful run of sims".
 
