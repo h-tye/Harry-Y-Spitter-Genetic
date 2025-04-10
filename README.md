@@ -13,14 +13,17 @@ A genetic algorithm based off the FOM was then used to selectively search for th
 # Genetic Algorithm
 The basic pipeline of the current genetic algorithm as follows:
   1. Generate 50 random configurations
-  2. Run sim on configurations, retrieve the 5 best configurations(based by FOM)
-  3. Generate 9 children for each of the best 5
+  2. Run sims on configurations
+  3. Retrieve the 5 best configurations(based by FOM)
+  4. Generate 9 children for each of the best 5
+     
      a. Children are made by randomly toggling a certain number of pixels within the parent structure. Hence we are introducing "mutations" to the children.
+     
      b. The best configuration will have the lowest mutation rate(LMR) and we gradually increase the mutation rate for the next 4. For example, if our LMR is 1
      then the best configuration will generate 9 children that have 1 randomly mutated pixel. The second best configuartion will generate 9 children that have 2
      mutated pixels, etc.
-  4. We then generate 5 more moderately random sims, typically with a mutation rate of 25 to ensure genetic variance within the generation.
-  5. This then comprises the next generation where we will run steps 2-4 until a desirable FOM is achieved or some other terminal condition is reached.
+  6. We then generate 5 more moderately random sims, typically with a mutation rate of 25 to ensure genetic variance within the generation.
+  7. This then comprises the next generation where we will run steps 2-4 until a desirable FOM is achieved or some other terminal condition is reached.
 This pipeline is implemented within /src/genetic_alg.py
 
 # Lowest Mutation Rate(LMR)
