@@ -22,7 +22,7 @@ The basic pipeline of the current genetic algorithm as follows:
      b. The best configuration will have the lowest mutation rate(LMR) and we gradually increase the mutation rate for the next 4. For example, if our LMR is 1
      then the best configuration will generate 9 children that have 1 randomly mutated pixel. The second best configuartion will generate 9 children that have 2
      mutated pixels, etc.
-  6. We then generate 5 more moderately random sims, typically with a mutation rate of 25 to ensure genetic variance within the generation.
+  6. We then generate 5 more moderately random sims(mutation rate of 25) to ensure genetic variance within the generation.
   7. This then comprises the next generation where we will run steps 2-4 until a desirable FOM is achieved or some other terminal condition is reached.
 This pipeline is implemented within /src/genetic_alg.py
 
