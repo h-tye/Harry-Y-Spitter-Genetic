@@ -40,7 +40,7 @@ This LMR has provided the fastest convergence compared to other methods such as 
 **LMR is/should be subject to change**
 
 # Beam Splitter Nueral Network(BSNN)
-BSNN initially was an attempt to train a CNN to recognize optimal features within our configurations and then generate a configuartion of high accuracy(FOM>.99). It was trained of 27K test configurations and acheived low loss within the test data. However, when run in a sim around 20% loss was seen and thus was not an accurate enough model to carry out its function. 
+BSNN initially was an attempt to train a CNN to recognize optimal features within our configurations and then generate a configuartion of high accuracy(FOM>.99). It was trained on 40K test configurations and acheived low loss within the test data. However, when run in a sim, around 20% loss was seen and thus was not an accurate enough model to carry out its function. 
 That being said, when a BSNN generated configuration was used as a starting configuration to generate the first generation(as opposed to randomly generating children), convergence to high FOM regions(FOM > .90) was achieved in 20 or less generations. This is opposed to our original method which took 100+ generations to reach the same level of FOM. Additionally, when a non-BSNN generated configuration with similar FOM was used as a starting position, the FOM degenerated for 10+ generations before increasing, leading to extremely slow convergence. 
 Thus the BSNN has shown initial promise of generating fast-converging starting positions and should continue to be investigated.
 
@@ -53,14 +53,14 @@ To run the project as is, follow these steps:
 
 If you would like to change the genetic algorithm logic, lines 241 - 300 are where the main "thinking" is done. The project should continue as normal to any changes made here. 
 
-If you want to increase the generation size, alter line 515. This will change the number of child configurations generated for each sim in the top 5. **If you alter generation size, you will also have to alter sbatch.lsf, line 6 so that the for loop iterates for the size of the generation**. 
+If you want to increase the generation size, alter line 515. This will change the number of child configurations generated for each sim in the top 5. 
 
 If you want to alter this project to run a different type of splitter ratio(perhaps 20/80 instead of 33/66), the only change to be made is within sbatch.lsf lines 53 and 54. This is where we define our "ideal" ratio so by altering this you will change how the FOM is calculated and thus what configuration the algorithm will converge to. 
 
-If you want to alter this project to run a different sim altogether, then the template within run_simulation.py(lines 21 ~ 210) will have to be changed accordingly along with the sbatch.lsf file(particularly lines 44-63). The algorithm may need some small tweaks depending on what your loss parameter is but the overall pipeline should be set to work with any other kind of sim. 
+For a more detailed, step-by-step use of this framework see the "expanded use" section.
 
 # Debugging
-The number 1 issue you will run into with this implementation is simulation failure. Since we are running the simulations on CRC's preempt partition, they are prone to failure and will usually only work after 2-3 tries. To get around this issue, the base slurm file(lsf.slurm, lines 37-81) will run the sims up to 20 times to ensure that all files are run correctly. Feel free to adjust this as neccessary. You will know this error has occured via the output log which will read "Unsuccessful run of sims".
+The number 1 issue you will run into with this implementation is simulation failure. Since we are running the simulations on CRC's preempt partition, they are prone to failure and will usually only work after 2-3 tries. To get around this issue, the base slurm file(lsf.slurm, lines 37-81) will run the sims up to 5 times to ensure that all files are run correctly. Feel free to adjust this as neccessary. You will know this error has occured via the output log which will read "Unsuccessful run of sims".
 
 The next most frequent error is during the startup procedure. Occassionally, run_simulation.py does not always generate the 50 starting sims and as a result not all the neccessary supplementary files are created to carry out the sim. If this happens, just delete the simulation output directory and retry. 
 
@@ -103,13 +103,40 @@ This will provide an explanation of the process behind the use:
 1. As explained above, run_simulation is called first to generate the first generation of sims as well as a lsf.slurm and sbatch.lsf file.
 2. The project is then submitted to CRC via the lsf.slurm file
 3. The slurm file then uses Lumerical MODE to carry out the sbatch.lsf script
-4. The sbacth script then loops through all of the lsf simulation scripts, creates a corresponding slurm file for the individual sim as well as a data proccessing lsf script.
+4. The sbatch script then loops through all of the lsf simulation scripts, creates a corresponding slurm file for the individual sim as well as a data proccessing lsf script.
 5. The sbatch script then generates an lms file of our sim. This is neccessary as Lumerical VarFDTD can only recieve lms files.
 6. The slurm file for each sim will then run this lms file as well as the data processing script so that the sim is run and data is stored.
 7. All of the individual slurm files are grouped together into "run_individual_sims.sh" which will submit each of the individual slurm files to CRC.
 8. At this point in the main lsf.slurm file, we call the function "run_on_exit()" which executes run_indivudal_sims.sh to begin simulating all of the individual sims.
 9. We then wait for all of the neccessary files to be completed. A sim will be marked as completed when it generates a file ending with ".completed.txt". T
-10. his is to indicate that the sim has successfully run and stored all neccessary data. Once the appropriate amount of completed files are genereated, the lsf.slurm file then carries out genetic_alg.py.
+10. This is to indicate that the sim has successfully run and stored all neccessary data. Once the appropriate amount of completed files are genereated, the lsf.slurm file then carries out genetic_alg.py.
 11. Genetic_alg.py will create the next generation and its corresponding lsf.slurm file.
-12. Then from our original lsf.slurm file, we submit the next generations lsf.slurm file to kickstart the next generation. 
+12. Then from our original lsf.slurm file, we submit the next generations lsf.slurm file to kickstart the next generation.
 
+# Expanded Use
+This section will go over a start to finish process on how to expand this genetic algorithm to run different types of simulations. This will be a general outline, so for a more detailed breakdown on how the code actually works see the following sections: "Genetic Algorithm", "Code Base Breakdown", and "Technical Pipeline". 
+
+1. **Set Up** : Assuming you have just cloned this repo, here are the first couple steps to ensure you have the proper environment
+   
+   a. First, ensure that you have installed the following python libraries: hashlib, pathlib, sys, numpy, and pandas. This can be done by running "pip install (library)". Additionally, you will need access to CRC/Lumerical to run these simulations. Click here to see how to get access to CRC: https://crc.pitt.edu/requesting-new-account/requesting-new-account/requesting-new-account 
+
+   b. The next step is to get familiar with how the code base currently works as it will be difficult to adapt it for your own project if you don't understand how it works in its current state. You can read the other sections in this repo or you can skim through the code; regardless the most important files to read through are: "run_simulation.py", "genetic_alg.py", "sbatch.lsf" and "lsf.slurm".
+
+   c. It may help to run the project as is first to ensure you are set up properly. See the "Use" section to do so.
+
+2. **Beginning Alterations** : Once you are confident everything is set up correctly, you can begin to make changes in "run_simulation.py"
+
+   a. The first file to take a look at is "run_simulation.py". Despite its name, this file does not actually "run" anything. This is the file that purely generates the first generation of sims and supplementary files.
+
+   b. In "run_simulation", you will need to alter the Setup Script(lines 31 - 226). Setup script is a template for the lumerical simulation you are running. In its current state, it runs a VarFDTD simulation for our 20x20 configuration. Since this is purely a template, some aspects of Setup Script should be subject to change for different sims. For example, since this project runs different kinds of configurations, you will see on line 138 that "hole_array = {configuration}" where {configuration} is a placeholder that gets replaced. Thus for your project, fill in placeholders for whatever aspects you want to change. Everything else will remain constant for every sim.
+
+   c. Next you can get rid of the format_matrix_string function as it is really only specific to this project.
+
+   d. The next step will be highly variant depending on your simulation. Currently, line 324 defines a starting position for our variable element(in this case, a 20x20 configuration). Thus you will have to choose some intial condition or setup for the aspect/s you wish to mutate.
+
+   e. Again, this step will also be highly dependent on your sim. At the moment, the project will make some change(mutation) to the intial condition and then will replace the placeholders in Setup Script to hold this value. We then create an lsf file based off this now "filled in" template. This process is repeated 50 times so that 50 simulation files are created. For your project, how you alter the setup script is up to you, but it is crucial for you to replace the placeholders and create the script.
+
+   f. The rest of the script is focused on file handling and creation of supplementary files needed to run the sim. For now, don't make any more alterations.
+
+3. 
+   
