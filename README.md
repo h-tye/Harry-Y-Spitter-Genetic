@@ -138,5 +138,7 @@ This section will go over a start to finish process on how to expand this geneti
 
    f. The rest of the script is focused on file handling and creation of supplementary files needed to run the sim. For now, don't make any more alterations.
 
-3. 
+   g. Now run "bash lsf.sh" to see if your files are appropriately genereated. They will be stored in /out/lsf/simulation_startup.
+
+4. **Slurm and Sbatch Modifications** : Now that 
    
