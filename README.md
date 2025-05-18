@@ -146,21 +146,21 @@ This section will go over a start to finish process on how to expand this geneti
 
    b. To cater the lsf.slurm script for your sim perform the following actions:
 
-     i. On line 177, change 'mode-solutions-batch' to fit the lumerical solver you are using. This solver should be capable of reading and running .lsf scripts not just sim scripts(.fsp,.lms,etc). Change this again on line 182.
+       i. On line 177, change 'mode-solutions-batch' to fit the lumerical solver you are using. This solver should be capable of reading and running .lsf scripts not just sim scripts(.fsp,.lms,etc). Change this again on line 182.
 
-     ii. On line 68, the slurm script waits a certain amount of time before checking if all your sims have been completed. If this time has passed and not all the sims are done or they failed, the slurm script will rerun the sims. Change this time to an approrpriate amount for your sim. For example, a sim that takes 30 seconds to run should have a wait period between 1-2 minutes.
+       ii. On line 68, the slurm script waits a certain amount of time before checking if all your sims have been completed. If this time has passed and not all the sims are done or they failed, the slurm script will rerun the sims. Change this time to an approrpriate amount for your sim. For example, a sim that takes 30 seconds to run should have a wait period between 1-2 minutes.
 
-     iii. On lines 98 and 113, change the path appropriately.
+       iii. On lines 98 and 113, change the path appropriately.
 
    c. The next file to look at is the sbatch.lsf script. This script is used to convert out simulation scripts(.lsf) into actual executable sims(.fsp/.lms/...) as well as generate all the slurm and results proccessing files.
 
    d. Make the following changes to this script:
 
-     i. Line 34 is used to create a name for the executable simulation. You will need to change this so that the file extension matches whatever solver you are using(.fsp for FDTD, .lms for MODE, etc). You will probably also want to change the variable name to match this.
+       i. Line 34 is used to create a name for the executable simulation. You will need to change this so that the file extension matches whatever solver you are using(.fsp for FDTD, .lms for MODE, etc). You will probably also want to change the variable name to match this.
 
-     ii. Lines 40 - 59 are used to create the results proccessing script. This is another lsf script that will read in the results of the simulation and calculate some metrics. Lines 41 and 42 should remain the same but as they just read in the results, however lines 43 - 55 should be altered to fit your requirements. Currently they get the transmissions through several monitors and calculate a metric based on these parameter. Lines 55 - 59 are neccessary as they store the results of the metrics so we can compare configuarations later. However, the manner on what you store and how you store them is up to you, as long as you can point to a specific, comparable metric then the algorithm will work with minor changes. 
+       ii. Lines 40 - 59 are used to create the results proccessing script. This is another lsf script that will read in the results of the simulation and calculate some metrics. Lines 41 and 42 should remain the same but as they just read in the results, however lines 43 - 55 should be altered to fit your requirements. Currently they get the transmissions through several monitors and calculate a metric based on these parameter. Lines 55 - 59 are neccessary as they store the results of the metrics so we can compare configuarations later. However, the manner on what you store and how you store them is up to you, as long as you can point to a specific, comparable metric then the algorithm will work with minor changes. 
 
-     ii. Lines 63 - 159 create a slurm file for the individual sim currently being inspected so we can run the sims in parallel. For example, if we have 50 sims, then we create 50 slurm files so that they can all be run at once. The only thing that needs to be looked at are lines 117 and 118. Similar to the base slurm file, just change the type of solver to run the sims.
+       ii. Lines 63 - 159 create a slurm file for the individual sim currently being inspected so we can run the sims in parallel. For example, if we have 50 sims, then we create 50 slurm files so that they can all be run at once. The only thing that needs to be looked at are lines 117 and 118. Similar to the base slurm file, just change the type of solver to run the sims.
 
   e. Once these modifications are made, I would recommend doing trial runs of 1 or 2 iterations to ensure that all the sims are running and the correct number of files are being created. 
 
@@ -168,11 +168,11 @@ This section will go over a start to finish process on how to expand this geneti
 
    a. There are no specific modifications to make to this script as it is almost entirely simulation depedendent, however I will outline the general pieces that are up for modification.
 
-     i. The functions 'read_in_txt_matrix(), read_in_txt_fom(), get_last_fom_values(), write_fom_to_history(), format_matrix_string()" are all data I/O functions. They are specific to the type of simulation we are running but in general they read in the simulation configuration and its associated metrics or they store the metric to history.
+       i. The functions 'read_in_txt_matrix(), read_in_txt_fom(), get_last_fom_values(), write_fom_to_history(), format_matrix_string()" are all data I/O functions. They are specific to the type of simulation we are running but in general they read in the simulation configuration and its associated metrics or they store the metric to history.
 
-     ii. The functions "long_term_LMR(), calc_beta()" are functions used to calculate the mutation strength for child configurations. long_term_LMR sets a base lowest mutation rate based on the previous iterations metric and calc_beta then determines how much the simulations within the generation should be mutated compared to each other. This is in no way the only method to calculate mutation rate and you should change this as neccessary.
+       ii. The functions "long_term_LMR(), calc_beta()" are functions used to calculate the mutation strength for child configurations. long_term_LMR sets a base lowest mutation rate based on the previous iterations metric and calc_beta then determines how much the simulations within the generation should be mutated compared to each other. This is in no way the only method to calculate mutation rate and you should change this as neccessary.
 
-     iii. After the function definitions, the general workflow of utilizing these functions to read in data and calculate mutation rate shouldn't change too much but if you would like to change the cap on how many iterations to run then alter line 272.
+       iii. After the function definitions, the general workflow of utilizing these functions to read in data and calculate mutation rate shouldn't change too much but if you would like to change the cap on how many iterations to run then alter line 272.
 
      iv. The rest of the script is a pretty much a repeat of run_simulation.py so you can reincorporate the changes from that script. 
 
