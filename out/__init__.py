@@ -12,7 +12,6 @@ def get_lsf_path():
     path.mkdir(parents=True, exist_ok=True)
     return path
 
-
 def get_results_path():
     path = Path(__file__).expanduser().absolute().parent.joinpath("results")
     path.mkdir(parents=True, exist_ok=True)

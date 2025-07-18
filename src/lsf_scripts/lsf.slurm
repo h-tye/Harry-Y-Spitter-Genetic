@@ -29,20 +29,24 @@ echo "DataDirectoryLocation: ${DataDirectoryLocation}";
 mkdir -p $DataDirectoryLocation;
 EXIT_CODE=1;
 
+echo "####################################### Main Program: Starting #######################################";
 
-# this is done 2nd, handles all the post-processing and genetic alg execution
+cd $RunDirectoryLocation || exit 1;
+
+srun  mode-solutions-batch -trust-script -logall "@name@.sbatch.lsf" >> "${OutFileLocation}" 2>&1 &
+process_id=$!
+
+exit $EXIT_CODE;
+
 run_on_exit() {
 
   echo "Waiting for $EXPECTED_FILES .completed.txt files in $RunDirectoryLocation..."
 
-  # loop to carry out execution of sims and error handling if sims failed
-
-  # increase or decrease length of loop to how you see fit
+  # Loop to carry out execution of sims and error handling if sims failed
   for (( i = 1; i < 20; i++ )); do
 
-    echo "Running bash file to execute individual sims";
-
     # Submit bash file that will execute all of the individual slurm files
+    echo "Running bash file to execute individual sims";
     bash run_individual_sims.sh
     EXIT_CODE=$?
 
@@ -52,44 +56,35 @@ run_on_exit() {
         exit $EXIT_CODE
     fi
 
+    # Wait 30 seconds before checking for completed files
+    sleep 30;
     LAST_MODIFIED_TIME=$(date +%s);
 
-    # Wait until all sims in the generation have an oppurtunity to run, shouldn't take more than a minute
-    while true; do
-        # Count the number of ".completed.txt" files using `find` (more robust than `ls`)
-        COMPLETED_COUNT=$(find "$RunDirectoryLocation" -maxdepth 1 -type f -name "*.completed.txt" | wc -l)
-        echo "Completed files: $COMPLETED_COUNT "
+    # Sim marked as completed by .completed.txt file
+    COMPLETED_COUNT=$(find "$RunDirectoryLocation" -maxdepth 1 -type f -name "*.completed.txt" | wc -l)
+    echo "Completed files: $COMPLETED_COUNT "
 
-        # Check if all files are generated, exit while loop if they have
-        if [[ $COMPLETED_COUNT -ge $EXPECTED_FILES ]]; then
-            echo "All $EXPECTED_FILES .completed.txt files detected. Proceeding to next step..."
-            EXIT_CODE=0
-            break
+    # Check if all files are generated, exit while loop if they have
+    if [[ $COMPLETED_COUNT -ge $EXPECTED_FILES ]]; then
+        echo "All $EXPECTED_FILES .completed.txt files detected. Proceeding to next step..."
+        EXIT_CODE=0
+        break
+    fi
+
+    # If sims haven't been completed in a minute, exit while loop and resubmit
+    current_time=$(date +%s)
+    echo "Current Time: $current_time"
+    echo "Last modified time: $LAST_MODIFIED_TIME"
+    time_difference=$((current_time - LAST_MODIFIED_TIME))
+    if [[ $time_difference -gt 60 ]]; then
+        echo "Not all sims were completed after 60 seconds, Retrying."
+        # Kill the process if necessary 
+        if [[ -n $process_id ]]; then
+            kill -15 "$process_id" 2>/dev/null
+            kill -9 "$process_id" 2>/dev/null
         fi
-
-        # If sims haven't been completed in a minute, exit while loop and resubmit
-        current_time=$(date +%s)
-        echo "Current Time: $current_time"
-        echo "Last modified time: $LAST_MODIFIED_TIME"
-        time_difference=$((current_time - LAST_MODIFIED_TIME))
-        if [[ $time_difference -gt 60 ]]; then
-            echo "Not all sims were completed after 60 seconds, Retrying."
-            # Kill the process if necessary 
-            if [[ -n $process_id ]]; then
-                kill -15 "$process_id" 2>/dev/null
-                kill -9 "$process_id" 2>/dev/null
-            fi
-            EXIT_CODE=1
-            break #exit loop
-        fi
-
-        # Wait for the specified interval before checking again
-        sleep 30
-    done
-
-    # if our exit code is 0, all files generated and exit loop
-    if [ $EXIT_CODE -eq 0 ]; then
-      break;
+        EXIT_CODE=1
+        break #exit loop
     fi
   
   done
@@ -100,12 +95,10 @@ run_on_exit() {
     exit 1
   fi
 
-  echo "Executing Genetic Algorithm"
-  
   # Carry out genetic algorithm script
-  python "${HOME}/Documents/Y_spitter/src/genetic_alg.py"
+  echo "Executing Genetic Algorithm"
+  python "${HOME}/Y_spitter/src/genetic_alg.py"
   EXIT_CODE=$?
-
   # Exit Slurm script if Python script exits early
   if [ $EXIT_CODE -ne 0 ]; then
       echo "Genetic algorithm exited early with code $EXIT_CODE. Exiting Slurm job."
@@ -119,23 +112,12 @@ run_on_exit() {
   sleep 30;
 
   # find our new sim directory
-  BASE_DIR="${HOME}/Documents/Y_spitter/out/lsf/"
-  # SIM_DIR=$(ls -d "$BASE_DIR"simulation__iteration* 2>/dev/null)
-
-  # # Check if the directory was found
-  # if [[ -z "$SIM_DIR" ]]; then
-  #     echo "Error: No directory starting with 'simulation' found in $BASE_DIR. Sim dir: $SIM_DIR"
-  #     exit 1
-  # fi
-
-  echo "Simulation directory found: $BASE_DIR"
+  BASE_DIR="${HOME}/Y_spitter/out/lsf/"
 
   #All previous files cleared, search for new generated base slurm and execute
-  for (( i = 1; i < 4; i++ )); do
-    echo "Searching for a .slurm file..."
-    slurm_file=$(find "$BASE_DIR" -maxdepth 2 -type f -name "*.slurm" | head -n 1)
-    sleep 20;
-  done
+  echo "Searching for a .slurm file..."
+  sleep 40;
+  slurm_file=$(find "$BASE_DIR" -maxdepth 2 -type f -name "*.slurm" | head -n 1)
 
   if [ -z "$slurm_file" ]; then
       echo "No .slurm file found."
@@ -168,72 +150,4 @@ run_on_exit() {
 }
 trap run_on_exit EXIT;
 
-echo "####################################### Main Program: Starting #######################################";
 
-cd $RunDirectoryLocation || exit 1;
-
-
-
-
-
-
-
-
-# this is run first
-
-# just run the sbatch script, everything else is logically not neccessary and can be removed if desired
-# once this is done, run_on_exit() will be called 
-EXIT_CODE=1;
-LAST_MODIFIED_TIME=$(date +%s);
-for (( i = 1; i < 2; i++ )); do
-  echo "${i}th attempt";
-  srun  mode-solutions-batch -trust-script -logall "@name@.sbatch.lsf" >> "${OutFileLocation}" 2>&1 &
-  process_id=$!
-
-  while ps -p $process_id > /dev/null; do
-    if [ -f "$SLURM_JOB_ID.completed.txt" ]; then
-      EXIT_CODE=0;
-      rm "$SLURM_JOB_ID.completed.txt";
-      echo "Completed Successfully";
-      kill -15 $process_id;
-      kill -9 $process_id;
-      break;
-    fi
-
-    if [ -f "$SLURM_JOB_ID.run.txt" ]; then
-      LAST_MODIFIED_TIME=$(stat -c %Y "$SLURM_JOB_ID.run.txt");
-      cat "$SLURM_JOB_ID.run.txt";
-      rm "$SLURM_JOB_ID.run.txt";
-    fi
-
-    current_time=$(date +%s);
-    time_difference=$((current_time - LAST_MODIFIED_TIME));
-    if [ $time_difference -gt 600 ]; then
-      echo "No progress in the 10 minutes. Killing the process";
-      kill -15 $process_id;
-      kill -9 $process_id;
-      break;
-    fi
-    
-    sleep 10;
-  done
-
-  if [ $EXIT_CODE -eq 0 ]; then
-    break;
-  fi
-
-  sleep 5;
-done
-
-all_files=$(ls ./*."${SLURM_JOB_ID}".running.lsf);
-for file in $all_files; do
-  file_without_num=$file;
-  file_without_num=${file_without_num%.*};
-  file_without_num=${file_without_num%.*};
-  file_without_num=${file_without_num%.*};
-  new_file=${file_without_num}.run.lsf;
-  echo "$file -> $new_file";
-  mv "$file" "$new_file";
-done
-
-exit $EXIT_CODE;

@@ -1,0 +1,189 @@
+deleteall;
+clear;
+switchtolayout;
+
+#define grid size dimensions
+grid_size_x = 20;
+grid_size_y = 20;
+cell_width = 120e-9;
+cell_height = 120e-9;
+
+si_sqr_xspan = 2.4e-6;
+si_sqr_yspan = 2.4e-6;
+wg_w = 0.5e-6;
+
+#define some stuff for FOM calculations
+FOM = 0;
+a = 2 / 3;
+
+#add solver
+addvarfdtd;
+set('mesh accuracy', 6);
+set("x", 0);
+set('x span', 3.5e-6);
+set("y", 0);
+set('y span', 3.5e-6);
+set("z max", 1.5e-6);
+set('z min', -1.5e-6);
+set('y0', -(si_sqr_xspan / 2 + 0.2e-6));
+set("x0", -(si_sqr_yspan - wg_w) / 2);
+
+#add substrate
+addrect;
+set('name', 'BOX');
+set("x", 0);
+set("y", 0);
+set('x span', 5e-6);
+set('y span', 5e-6);
+set("z max", -0.11e-6);
+set('z min', -2e-6);
+set('material', "SiO2 (Glass) - Palik");
+
+######################################
+
+#add rectangle for silicon
+addrect();
+set("name", "si_sqr");
+set("x", 0);
+set("y", 0);
+set("z", 0);
+set('x span', si_sqr_xspan);
+set('y span', si_sqr_yspan);
+set('z span', 220e-9);
+set('material', 'Si (Silicon) - Palik');
+
+addrect();
+set("name", "wg_out_cross");
+set("x min", si_sqr_xspan / 2);
+set('x max', si_sqr_xspan / 2 + 1.5e-6);
+set("y", (si_sqr_yspan - wg_w) / 2);
+set('y span', wg_w);
+set("z", 0);
+set('z span', 220e-9);
+set('material', 'Si (Silicon) - Palik');
+
+addrect();
+set("name", "wg_out_thru");
+set("y min", si_sqr_xspan / 2);
+set('y max', si_sqr_xspan / 2 + 1.5e-6);
+set("x", -(si_sqr_yspan - wg_w) / 2);
+set('x span', wg_w);
+set("z", 0);
+set('z span', 220e-9);
+set('material', 'Si (Silicon) - Palik');
+
+addrect();
+set("name", "wg_in_thru");
+set("y max", -si_sqr_xspan / 2);
+set('y min', -(si_sqr_xspan / 2 + 1.5e-6));
+set("x", -(si_sqr_yspan - wg_w) / 2);
+set('x span', wg_w);
+set("z", 0);
+set('z span', 220e-9);
+set('material', 'Si (Silicon) - Palik');
+
+######################################
+
+#add source
+addmodesource;
+set("injection axis", "y");
+set('set wavelength', 1);
+set("wavelength start", 1.5e-6);
+set("wavelength stop", 1.6e-6);
+set("x", -(si_sqr_yspan - wg_w) / 2);
+set('y', -(si_sqr_xspan / 2 + 0.2e-6));
+set("x span", 2.5e-6);
+
+#add monitor
+addpower;
+set("name", "mon_top_down");
+set("x", 0);
+set("y", 0);
+set('x span', si_sqr_xspan + 0.5e-6);
+set('y span', si_sqr_yspan + 0.5e-6);
+set('z', 0);
+
+#add index monitor(big monitor)
+addindex;
+set("name", "mon_index");
+set("x", 0);
+set("y", 0);
+set('x span', si_sqr_xspan + 1.5e-6);
+set('y span', si_sqr_yspan + 1.5e-6);
+set('z', 0);
+
+#add transmittance monitors
+addpower;
+set("name", "mon_source");
+set("monitor type", "2D Y-normal");
+set("x", -(si_sqr_yspan - wg_w) / 2);
+set('y', -(si_sqr_xspan / 2 + 0.1e-6));
+set('z', 0);
+set('x span', 1e-6);
+set('z span', 1e-6);
+
+addpower;
+set("name", "mon_thru");
+set("monitor type", "2D Y-normal");
+set("x", -(si_sqr_yspan - wg_w) / 2);
+set('y', (si_sqr_xspan / 2 + 0.4e-6));
+set('z', 0);
+set('x span', 1e-6);
+set('z span', 1e-6);
+
+addpower;
+set("name", "mon_cross");
+set("monitor type", "2D X-normal");
+set('x', (si_sqr_xspan / 2 + 0.4e-6));
+set("y", (si_sqr_yspan - wg_w) / 2);
+set('z', 0);
+set('y span', 1e-6);
+set('z span', 1e-6);
+
+#add changes
+
+addstructuregroup;
+set('name', 'hole_array');
+
+#define srating hole pattern, this is the array of 0s and 1s that will be used to create the holes
+holeArray = {configuration};
+holeMatrix = "";
+
+for (i = 1:length(holeArray(:,1))) {  # Loop over rows
+    row_str = num2str(holeArray(i, :));  # Convert row to string
+    holeMatrix = holeMatrix + row_str + "; ";  # Append row with separator
+}
+
+
+#select and delete old cirles
+select('hole_array');
+delete;
+
+#create circles based on starting array
+for (i = 0; i < grid_size_x; i = i + 1)
+{
+    for (j = 0; j < grid_size_y; j = j + 1)
+    {
+#calculate the position for each cell
+        x_position = (i)*cell_width - si_sqr_xspan / 2;
+        y_position = (j)*cell_height - si_sqr_xspan / 2;
+
+#create each cell
+        addcircle();
+        set('name', 'Circle');
+        set('radius', 45e-9);
+        set('x', x_position + cell_width / 2);
+        set('y', y_position + cell_height / 2);
+        set('z span', 222e-9);
+        addtogroup('hole_array');
+
+        if (holeArray(i + 1, j + 1) == 0)
+        {
+            set('material', 'Si (Silicon) - Palik');
+        }
+        else
+        {
+            set('material', 'etch');
+        }
+    }
+}

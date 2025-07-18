@@ -78,8 +78,11 @@ def read_in_txt_matrix(file_path):
 
 
 def read_in_txt_fom(file_path):
-    with open(file_path, "r") as file:
-        return float(file.readlines()[-1].strip())
+    try:
+        with open(file_path, "r") as file:
+            return float(file.readlines()[-1].strip())
+    except Exception:
+        return 0.50
 
 def sort_by_fom(configs):
     return sorted(configs, key=lambda config: config.fom, reverse=True)
@@ -158,6 +161,24 @@ def long_term_LMR(top_five, previous_foms,gamma):
     
 
     return mutation_strength
+
+def calc_beta(current_fom, best_fom, previous_foms):
+    
+    #if we are not in long run, keep beta as 1
+    if len(previous_foms) < 100:
+        return 1
+    else :
+
+        #first figure out what typical distance from the best is
+        global_total = 0
+        for k in range(15):
+            global_difference = abs(previous_foms[-k] - best_fom)
+            global_total = global_total + global_difference
+        normalized_grad = global_total / 15
+
+        beta = 1 + int((abs(current_fom - best_fom) / normalized_grad))
+        return beta
+
 
 # Directory and history file
 # Find the correct results directory
@@ -441,11 +462,7 @@ SETUP_SCRIPT = r'''
 
 '''
 
-#run again for insurance
-cleanup(results_directory)
-
-i = 1 #iterator marker for script name
-num_child_configs = 9 #number of child configurations we want to generate per each sim
+num_child_configs = 10 #number of child configurations we want to generate per each sim
 
 #loop through top 5 configurations and generate children for each of them
 for configuration in top_five:
@@ -459,18 +476,21 @@ for configuration in top_five:
         #individual script name = iteration + accuracy marker(1-5) + individual simulation_num
         script_name = (
             f'simulation_'
-            f'{i}_'
+            f'1_'
             f'{simulation_num}'
         )
 
         #create a copy of the hole array to work with so we don't modify the original
         hole_array_temp = hole_array.copy()
 
+        # calculate beta for intra-generation mutation strength
+        beta = calc_beta(configuration.fom, max(previous_foms), previous_foms)
+
         # for each child config, randomly toggle mutation_strenght*i indices
         # we toggle more indices as the sims get less accurate
         # Ex. top configuartion will toggle 5 pixels, 2nd config will toggle 10, etc
-        for _ in range(mutation_strength*i):
-            local_mutation = mutation_strength*i
+        for _ in range(mutation_strength*beta):
+            local_mutation = mutation_strength*beta
             row, col = np.random.randint(0, 20, size=2)  # Random row & column index
             hole_array_temp.iloc[row, col] = 1 - hole_array.iloc[row, col]  # Toggle 0, 1
         
@@ -493,38 +513,6 @@ for configuration in top_five:
     #once we are done configuartion iterate i
     i = i + 1 
 
-
-#create 5 random sims, can abstract this logic into previous step if desired
-for simulation_num in range(5):
-
-    #unique name for randoms
-    script_name = (
-        f'simulation_'
-        f'random_'
-        f'{simulation_num}'
-    )
-
-    #randomly toggle every pixel
-    for _ in range(25):
-        row, col = np.random.randint(0, 20, size=2)  # Random row & column index
-
-        #hole array is from last defined one, doesn't matter because we alter everything anyways
-        hole_array.iloc[row, col] = 1 - hole_array.iloc[row, col]  # Toggle 0, 1
-    
-
-    setup_script = SETUP_SCRIPT
-    setup_script = setup_script.replace('{configuration}',format_matrix_string(hole_array))
-
-    common_args = dict(
-        parameters=format_matrix_string(hole_array),
-        setup_script=setup_script,
-        script_name=script_name,
-    )
-
-    #generate individual script for configuration with uniq
-    create_lsf_script(
-        **common_args
-    )
 
 #generate slurm file for all scripts, code pulled from lsf.py 
 location = get_lsf_path()
@@ -575,6 +563,7 @@ location.joinpath(f"{script_name}.lsf.slurm").write_text(slurm_lsf, encoding="ut
 
 lsf_script = get_lsf_scripts_path().joinpath("sbatch.lsf").read_text(encoding="utf-8")
 lsf_script = lsf_script.replace("@name@", f"{script_name}")
+lsf_script = lsf_script.replace("@num_files", f"{expected_files}")
 lsf_script = lsf_script.replace("@RunDirectoryLocation@", location_str)
 lsf_script = lsf_script.replace("@DataDirectoryLocation@", data_location_str)
 location.joinpath(f"{script_name}.sbatch.lsf").write_text(lsf_script, encoding="utf-8")

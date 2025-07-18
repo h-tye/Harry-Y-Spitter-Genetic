@@ -1,1 +1,0 @@
-HASH_LENGTH = 8
