@@ -39,7 +39,7 @@ Create an LSF script for a given configuration.
 def create_child_lsf_script(configuration, script_name,script_dir):
 
     # Define the path to the LSF script in the script directory
-    lsf_script_path = Path(script_dir) / f"{script_name}.lsf"
+    lsf_script_path = Path(script_dir) / f"{script_name}.run.lsf"
 
     # Replace placeholders in the template with actual values
     lsf_script = SETUP_SCRIPT.replace("{configuration}", configuration)
