@@ -34,7 +34,7 @@ for(k = 0;k < @num_files; k = k + 1) {
     write("iterator.txt",num2str(k), "overwrite");
 
 	# evaluate script to generate lms file, 
-	feval(random_filename);
+	feval(filename);
     
 	#read back iterator, this needs to be done or you will enter an infinite loop
 	k = read("iterator.txt");
